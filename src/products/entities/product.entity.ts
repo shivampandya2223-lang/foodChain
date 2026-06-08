@@ -1,6 +1,7 @@
-import { Column, Entity, Index, ManyToOne, OneToOne } from 'typeorm';
+import { Column, Entity, Index, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
 import { InventoryItem } from '../../inventory/entities/inventory-item.entity';
+import { MenuRecipeItem } from '../../menu/entities/menu-recipe-item.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity('products')
@@ -26,4 +27,7 @@ export class Product extends BaseEntity {
 
   @OneToOne(() => InventoryItem, (inventoryItem) => inventoryItem.product)
   inventoryItem?: InventoryItem;
+
+  @OneToMany(() => MenuRecipeItem, (recipeItem) => recipeItem.product)
+  menuRecipeItems: MenuRecipeItem[];
 }

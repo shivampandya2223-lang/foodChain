@@ -38,10 +38,7 @@ export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
 
   @Post()
-  @Permissions(
-    PermissionType.MANAGE_ALL_SHOPS,
-    PermissionType.MANAGE_MULTIPLE_SHOPS,
-  )
+  @Permissions(PermissionType.SHOP_CREATE)
   @ApiOperation({ summary: 'Create a shop' })
   @ApiBody({ type: CreateShopDto })
   @ApiOkResponse({ description: 'Shop created.' })
@@ -70,10 +67,7 @@ export class ShopsController {
   }
 
   @Patch(':id')
-  @Permissions(
-    PermissionType.MANAGE_ALL_SHOPS,
-    PermissionType.MANAGE_MULTIPLE_SHOPS,
-  )
+  @Permissions(PermissionType.SHOP_UPDATE)
   @ApiOperation({ summary: 'Update a shop' })
   @ApiParam({ name: 'id', description: 'Shop UUID' })
   @ApiBody({ type: UpdateShopDto })
@@ -97,12 +91,12 @@ export class ShopsController {
   }
 
   @Delete(':id')
-  @Permissions(PermissionType.MANAGE_ALL_SHOPS)
+  @Permissions(PermissionType.SHOP_DELETE)
   @ApiOperation({ summary: 'Deactivate a shop' })
   @ApiParam({ name: 'id', description: 'Shop UUID' })
   @ApiOkResponse({ description: 'Shop marked inactive.' })
   @ApiForbiddenResponse({
-    description: 'Only MANAGE_ALL_SHOPS can deactivate.',
+    description: 'Only shop.delete can deactivate.',
   })
   deactivate(@Param('id') id: string) {
     return this.shopsService.deactivate(id);

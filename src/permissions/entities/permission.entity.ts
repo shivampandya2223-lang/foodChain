@@ -5,7 +5,7 @@ import { Role } from '../../roles/entities/role.entity';
 
 @Entity('permissions')
 export class Permission extends BaseEntity {
-  @Column({ type: 'enum', enum: PermissionType, unique: true })
+  @Column({ type: 'varchar', unique: true })
   name: PermissionType;
 
   @Column({ nullable: true })

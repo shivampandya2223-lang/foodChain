@@ -8,7 +8,11 @@ import {
   RolePermissions,
   RoleType,
 } from '../common/enums/role.enum';
+import { InventoryItem } from '../inventory/entities/inventory-item.entity';
+import { MenuItem } from '../menu/entities/menu-item.entity';
+import { MenuRecipeItem } from '../menu/entities/menu-recipe-item.entity';
 import { Permission } from '../permissions/entities/permission.entity';
+import { Product } from '../products/entities/product.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
@@ -25,6 +29,14 @@ export class SeedService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(Shop)
     private readonly shopsRepository: Repository<Shop>,
+    @InjectRepository(Product)
+    private readonly productsRepository: Repository<Product>,
+    @InjectRepository(InventoryItem)
+    private readonly inventoryItemsRepository: Repository<InventoryItem>,
+    @InjectRepository(MenuItem)
+    private readonly menuItemsRepository: Repository<MenuItem>,
+    @InjectRepository(MenuRecipeItem)
+    private readonly recipeItemsRepository: Repository<MenuRecipeItem>,
   ) {}
 
   async run() {
@@ -34,12 +46,16 @@ export class SeedService {
       roles.get(RoleType.SUPER_ADMIN),
     );
     const shop = await this.seedShop(superAdmin);
+    const products = await this.seedProducts(shop);
+    const menuItem = await this.seedMenu(shop, products);
 
     return {
       permissions: permissions.size,
       roles: roles.size,
       superAdmin: superAdmin.email,
       shop: shop.slug,
+      products: products.length,
+      menuItem: menuItem.name,
     };
   }
 
@@ -151,8 +167,131 @@ export class SeedService {
   private humanize(value: string) {
     return value
       .toLowerCase()
-      .split('_')
+      .split(/[._]/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  }
+
+  private async seedProducts(shop: Shop) {
+    const productsToSeed = [
+      {
+        name: 'Cheese',
+        sku: 'CHEESE-001',
+        price: '120.00',
+        quantity: '50.000',
+      },
+      {
+        name: 'Tomato Sauce',
+        sku: 'SAUCE-001',
+        price: '80.00',
+        quantity: '40.000',
+      },
+      { name: 'Dough', sku: 'DOUGH-001', price: '30.00', quantity: '100.000' },
+      {
+        name: 'Paneer',
+        sku: 'PANEER-001',
+        price: '160.00',
+        quantity: '30.000',
+      },
+      { name: 'Onion', sku: 'ONION-001', price: '40.00', quantity: '60.000' },
+      {
+        name: 'Capsicum',
+        sku: 'CAPSICUM-001',
+        price: '55.00',
+        quantity: '45.000',
+      },
+      {
+        name: 'Coke Can',
+        sku: 'COKE-001',
+        price: '40.00',
+        quantity: '100.000',
+      },
+    ];
+
+    const products: Product[] = [];
+
+    for (const productToSeed of productsToSeed) {
+      let product = await this.productsRepository.findOne({
+        where: { sku: productToSeed.sku },
+        relations: { shop: true, inventoryItem: true },
+      });
+
+      if (!product) {
+        product = await this.productsRepository.save(
+          this.productsRepository.create({
+            name: productToSeed.name,
+            sku: productToSeed.sku,
+            price: productToSeed.price,
+            shop,
+          }),
+        );
+      }
+
+      if (!product.inventoryItem) {
+        await this.inventoryItemsRepository.save(
+          this.inventoryItemsRepository.create({
+            shop,
+            product,
+            quantity: productToSeed.quantity,
+            reorderLevel: '5.000',
+          }),
+        );
+      }
+
+      products.push(product);
+    }
+
+    return products;
+  }
+
+  private async seedMenu(shop: Shop, products: Product[]) {
+    const productsBySku = new Map(
+      products.map((product) => [product.sku, product]),
+    );
+    let menuItem = await this.menuItemsRepository.findOne({
+      where: { name: 'Margherita Pizza' },
+      relations: { shop: true, recipeItems: true },
+    });
+
+    if (!menuItem) {
+      menuItem = await this.menuItemsRepository.save(
+        this.menuItemsRepository.create({
+          name: 'Margherita Pizza',
+          description:
+            'Classic pizza made with dough, cheese, and tomato sauce',
+          price: '249.00',
+          shop,
+        }),
+      );
+    }
+
+    if (!menuItem.recipeItems?.length) {
+      const recipeItems = [
+        { sku: 'DOUGH-001', quantity: '1.000', unit: 'piece' },
+        { sku: 'CHEESE-001', quantity: '0.150', unit: 'kg' },
+        { sku: 'SAUCE-001', quantity: '0.080', unit: 'kg' },
+      ]
+        .map((recipeItem) => {
+          const product = productsBySku.get(recipeItem.sku);
+
+          if (!product) {
+            return undefined;
+          }
+
+          return this.recipeItemsRepository.create({
+            menuItem,
+            product,
+            quantity: recipeItem.quantity,
+            unit: recipeItem.unit,
+          });
+        })
+        .filter((recipeItem): recipeItem is MenuRecipeItem =>
+          Boolean(recipeItem),
+        );
+
+      await this.recipeItemsRepository.save(recipeItems);
+    }
+
+    return menuItem;
   }
 }

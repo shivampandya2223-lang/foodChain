@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
+import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
+import { MenuItem } from '../menu/entities/menu-item.entity';
+import { MenuRecipeItem } from '../menu/entities/menu-recipe-item.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { Order } from '../orders/entities/order.entity';
 import { Permission } from '../permissions/entities/permission.entity';
@@ -33,6 +36,9 @@ import { SeedService } from './seed.service';
           Subscription,
           Product,
           InventoryItem,
+          InventoryTransaction,
+          MenuItem,
+          MenuRecipeItem,
           Order,
           OrderItem,
           Task,
@@ -41,7 +47,16 @@ import { SeedService } from './seed.service';
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
-    TypeOrmModule.forFeature([Permission, Role, User, Shop]),
+    TypeOrmModule.forFeature([
+      Permission,
+      Role,
+      User,
+      Shop,
+      Product,
+      InventoryItem,
+      MenuItem,
+      MenuRecipeItem,
+    ]),
   ],
   providers: [SeedService],
   exports: [SeedService],

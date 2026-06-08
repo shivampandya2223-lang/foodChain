@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
 import { InventoryItem } from '../../inventory/entities/inventory-item.entity';
+import { MenuItem } from '../../menu/entities/menu-item.entity';
 import { Order } from '../../orders/entities/order.entity';
 import { Product } from '../../products/entities/product.entity';
 import { Subscription } from '../../subscriptions/entities/subscription.entity';
@@ -45,6 +46,9 @@ export class Shop extends BaseEntity {
 
   @OneToMany(() => Product, (product) => product.shop)
   products: Product[];
+
+  @OneToMany(() => MenuItem, (menuItem) => menuItem.shop)
+  menuItems: MenuItem[];
 
   @OneToMany(() => InventoryItem, (inventoryItem) => inventoryItem.shop)
   inventoryItems: InventoryItem[];

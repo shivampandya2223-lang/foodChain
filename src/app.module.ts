@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductsModule } from './products/products.module';
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module';
     SubscriptionsModule,
     ProductsModule,
     InventoryModule,
+    MenuModule,
     OrdersModule,
     TasksModule,
     SettingsModule,

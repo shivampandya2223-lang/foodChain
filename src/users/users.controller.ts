@@ -47,7 +47,7 @@ export class UsersController {
 
   @Get()
   @Roles(RoleType.SUPER_ADMIN, RoleType.ADMIN)
-  @Permissions(PermissionType.MANAGE_ADMINS, PermissionType.MANAGE_PERMISSIONS)
+  @Permissions(PermissionType.USER_READ, PermissionType.PERMISSION_MANAGE)
   @ApiOperation({ summary: 'List users' })
   @ApiOkResponse({ description: 'Returns all users without passwordHash.' })
   findAll() {
