@@ -8,6 +8,16 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiForbiddenResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,6 +31,9 @@ import { ShopsService } from './shops.service';
 
 @Controller('shops')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@ApiTags('Shops')
+@ApiBearerAuth('access-token')
+@ApiUnauthorizedResponse({ description: 'Missing or invalid JWT.' })
 export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
 
@@ -29,18 +42,29 @@ export class ShopsController {
     PermissionType.MANAGE_ALL_SHOPS,
     PermissionType.MANAGE_MULTIPLE_SHOPS,
   )
+  @ApiOperation({ summary: 'Create a shop' })
+  @ApiBody({ type: CreateShopDto })
+  @ApiOkResponse({ description: 'Shop created.' })
+  @ApiForbiddenResponse({ description: 'Missing shop management permission.' })
   create(@Body() createShopDto: CreateShopDto) {
     return this.shopsService.create(createShopDto);
   }
 
   @Get()
   @Roles(RoleType.SUPER_ADMIN, RoleType.ADMIN, RoleType.OWNER)
+  @ApiOperation({ summary: 'List shops' })
+  @ApiOkResponse({
+    description: 'Returns shops with owner/users/subscription.',
+  })
   findAll() {
     return this.shopsService.findAll();
   }
 
   @Get(':id')
   @Roles(RoleType.SUPER_ADMIN, RoleType.ADMIN, RoleType.OWNER)
+  @ApiOperation({ summary: 'Get shop details' })
+  @ApiParam({ name: 'id', description: 'Shop UUID' })
+  @ApiOkResponse({ description: 'Returns one shop with relations.' })
   findOne(@Param('id') id: string) {
     return this.shopsService.findOne(id);
   }
@@ -50,12 +74,21 @@ export class ShopsController {
     PermissionType.MANAGE_ALL_SHOPS,
     PermissionType.MANAGE_MULTIPLE_SHOPS,
   )
+  @ApiOperation({ summary: 'Update a shop' })
+  @ApiParam({ name: 'id', description: 'Shop UUID' })
+  @ApiBody({ type: UpdateShopDto })
+  @ApiOkResponse({ description: 'Shop updated.' })
+  @ApiForbiddenResponse({ description: 'Missing shop management permission.' })
   update(@Param('id') id: string, @Body() updateShopDto: UpdateShopDto) {
     return this.shopsService.update(id, updateShopDto);
   }
 
   @Patch(':id/users')
   @Roles(RoleType.SUPER_ADMIN, RoleType.ADMIN, RoleType.OWNER)
+  @ApiOperation({ summary: 'Assign users to a shop' })
+  @ApiParam({ name: 'id', description: 'Shop UUID' })
+  @ApiBody({ type: AssignShopUsersDto })
+  @ApiOkResponse({ description: 'Users assigned to shop.' })
   assignUsers(
     @Param('id') id: string,
     @Body() assignShopUsersDto: AssignShopUsersDto,
@@ -65,6 +98,12 @@ export class ShopsController {
 
   @Delete(':id')
   @Permissions(PermissionType.MANAGE_ALL_SHOPS)
+  @ApiOperation({ summary: 'Deactivate a shop' })
+  @ApiParam({ name: 'id', description: 'Shop UUID' })
+  @ApiOkResponse({ description: 'Shop marked inactive.' })
+  @ApiForbiddenResponse({
+    description: 'Only MANAGE_ALL_SHOPS can deactivate.',
+  })
   deactivate(@Param('id') id: string) {
     return this.shopsService.deactivate(id);
   }
