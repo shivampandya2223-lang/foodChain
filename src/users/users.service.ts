@@ -1,0 +1,180 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { In, Repository } from 'typeorm';
+import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
+import { RoleType } from '../common/enums/role.enum';
+import { Role } from '../roles/entities/role.entity';
+import { Shop } from '../shops/entities/shop.entity';
+import { CreateUserDto } from './dto/create-user.dto';
+import { User } from './entities/user.entity';
+
+export type SafeUser = Omit<User, 'passwordHash'>;
+
+@Injectable()
+export class UsersService {
+  constructor(
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly rolesRepository: Repository<Role>,
+    @InjectRepository(Shop)
+    private readonly shopsRepository: Repository<Shop>,
+  ) {}
+
+  async create(createUserDto: CreateUserDto, creator?: AuthenticatedUser) {
+    this.assertCreatorCanCreateRoles(createUserDto.roles, creator);
+
+    const email = createUserDto.email.toLowerCase().trim();
+    const existingUser = await this.usersRepository.findOne({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('A user with this email already exists');
+    }
+
+    const roles = await this.rolesRepository.find({
+      where: { name: In(createUserDto.roles) },
+    });
+
+    if (roles.length !== createUserDto.roles.length) {
+      throw new BadRequestException('One or more roles do not exist');
+    }
+
+    const shops = await this.resolveAssignableShops(
+      createUserDto.shopIds ?? [],
+      creator,
+    );
+
+    const createdBy = creator
+      ? await this.usersRepository.findOne({ where: { id: creator.id } })
+      : undefined;
+
+    const user = this.usersRepository.create({
+      email,
+      passwordHash: await bcrypt.hash(createUserDto.password, 10),
+      firstName: createUserDto.firstName,
+      lastName: createUserDto.lastName,
+      phone: createUserDto.phone,
+      roles,
+      shops,
+      createdBy: createdBy ?? undefined,
+    });
+
+    return this.toSafeUser(await this.usersRepository.save(user));
+  }
+
+  async findByEmailWithRoles(email: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { email: email.toLowerCase().trim(), isActive: true },
+      relations: { roles: { permissions: true }, shops: true },
+    });
+  }
+
+  async findById(id: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: { roles: { permissions: true }, shops: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.toSafeUser(user);
+  }
+
+  async findAll() {
+    const users = await this.usersRepository.find({
+      relations: { roles: true, shops: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return users.map((user) => this.toSafeUser(user));
+  }
+
+  private assertCreatorCanCreateRoles(
+    rolesToCreate: RoleType[],
+    creator?: AuthenticatedUser,
+  ) {
+    if (!creator) {
+      return;
+    }
+
+    const creatorRoles = creator.roles;
+
+    if (creatorRoles.includes(RoleType.SUPER_ADMIN)) {
+      return;
+    }
+
+    if (
+      creatorRoles.includes(RoleType.ADMIN) &&
+      rolesToCreate.every((role) =>
+        [RoleType.OWNER, RoleType.EMPLOYEE].includes(role),
+      )
+    ) {
+      return;
+    }
+
+    if (
+      creatorRoles.includes(RoleType.OWNER) &&
+      rolesToCreate.every((role) => role === RoleType.EMPLOYEE)
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException('You cannot create a user with these roles');
+  }
+
+  private async resolveAssignableShops(
+    shopIds: string[],
+    creator?: AuthenticatedUser,
+  ) {
+    if (!shopIds.length) {
+      return [];
+    }
+
+    const shops = await this.shopsRepository.find({
+      where: { id: In(shopIds) },
+    });
+
+    if (shops.length !== shopIds.length) {
+      throw new BadRequestException('One or more shops do not exist');
+    }
+
+    if (!creator || creator.roles.includes(RoleType.SUPER_ADMIN)) {
+      return shops;
+    }
+
+    const allowedShopIds = new Set(
+      (
+        await this.shopsRepository
+          .createQueryBuilder('shop')
+          .innerJoin('shop.users', 'user', 'user.id = :userId', {
+            userId: creator.id,
+          })
+          .select('shop.id', 'id')
+          .getRawMany<{ id: string }>()
+      ).map((shop) => shop.id),
+    );
+
+    if (shops.some((shop) => !allowedShopIds.has(shop.id))) {
+      throw new ForbiddenException('You cannot assign users to these shops');
+    }
+
+    return shops;
+  }
+
+  private toSafeUser(user: User) {
+    const safeUser: Partial<User> = { ...user };
+    delete safeUser.passwordHash;
+
+    return safeUser;
+  }
+}

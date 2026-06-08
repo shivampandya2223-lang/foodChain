@@ -1,4 +1,11 @@
-import { Column, Entity, ManyToMany, ManyToOne, OneToMany, OneToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ManyToMany,
+  ManyToOne,
+  OneToMany,
+  OneToOne,
+} from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
 import { InventoryItem } from '../../inventory/entities/inventory-item.entity';
 import { Order } from '../../orders/entities/order.entity';

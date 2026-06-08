@@ -12,6 +12,7 @@ import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SystemSetting } from '../settings/entities/system-setting.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { User } from '../users/entities/user.entity';
+import { SeedService } from './seed.service';
 
 @Module({
   imports: [
@@ -40,6 +41,9 @@ import { User } from '../users/entities/user.entity';
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
+    TypeOrmModule.forFeature([Permission, Role, User, Shop]),
   ],
+  providers: [SeedService],
+  exports: [SeedService],
 })
 export class DatabaseModule {}
