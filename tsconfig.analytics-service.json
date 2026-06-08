@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-analytics-service",
+    "rootDir": "."
+  },
+  "include": [
+    "apps/analytics-service/src/**/*.ts",
+    "src/common/enums/**/*.ts",
+    "src/config/**/*.ts",
+    "src/contracts/**/*.ts",
+    "src/kafka/**/*.ts",
+    "src/storage/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "dist-*", "**/*.spec.ts"]
+}

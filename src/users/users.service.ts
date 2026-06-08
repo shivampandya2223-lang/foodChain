@@ -8,7 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
+import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { RoleType } from '../common/enums/role.enum';
+import { createDomainEvent } from '../kafka/kafka-event.factory';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -25,6 +28,7 @@ export class UsersService {
     private readonly rolesRepository: Repository<Role>,
     @InjectRepository(Shop)
     private readonly shopsRepository: Repository<Shop>,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
   async create(createUserDto: CreateUserDto, creator?: AuthenticatedUser) {
@@ -67,7 +71,21 @@ export class UsersService {
       createdBy: createdBy ?? undefined,
     });
 
-    return this.toSafeUser(await this.usersRepository.save(user));
+    const savedUser = await this.usersRepository.save(user);
+
+    await this.kafkaProducer.publish(
+      KafkaTopic.USER_CREATED,
+      createDomainEvent(KafkaTopic.USER_CREATED, {
+        userId: savedUser.id,
+        email: savedUser.email,
+        roles: roles.map((role) => role.name),
+        shopIds: shops.map((shop) => shop.id),
+        createdById: createdBy?.id,
+      }),
+      savedUser.id,
+    );
+
+    return this.toSafeUser(savedUser);
   }
 
   async findByEmailWithRoles(email: string): Promise<User | null> {

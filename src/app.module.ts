@@ -7,6 +7,7 @@ import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { DevicesModule } from './devices/devices.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { KafkaModule } from './kafka/kafka.module';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
 import { PermissionsModule } from './permissions/permissions.module';
@@ -14,6 +15,7 @@ import { ProductsModule } from './products/products.module';
 import { RolesModule } from './roles/roles.module';
 import { SettingsModule } from './settings/settings.module';
 import { ShopsModule } from './shops/shops.module';
+import { StorageModule } from './storage/storage.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
@@ -26,6 +28,7 @@ import { UsersModule } from './users/users.module';
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,
+    StorageModule,
     DevicesModule,
     AuthModule,
     UsersModule,
@@ -35,6 +38,7 @@ import { UsersModule } from './users/users.module';
     SubscriptionsModule,
     ProductsModule,
     InventoryModule,
+    KafkaModule,
     MenuModule,
     OrdersModule,
     TasksModule,

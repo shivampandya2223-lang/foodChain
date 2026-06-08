@@ -8,9 +8,12 @@ import { DataSource, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { InventoryTransactionSource } from '../common/enums/inventory-transaction-source.enum';
 import { InventoryTransactionType } from '../common/enums/inventory-transaction-type.enum';
+import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
+import { createDomainEvent } from '../kafka/kafka-event.factory';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { MenuItem } from '../menu/entities/menu-item.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
@@ -45,13 +48,14 @@ export class OrdersService {
     private readonly menuItemsRepository: Repository<MenuItem>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
   async create(
     createOrderDto: CreateOrderDto,
     currentUser?: AuthenticatedUser,
   ) {
-    return this.dataSource.transaction(async (manager) => {
+    const createdOrder = await this.dataSource.transaction(async (manager) => {
       const shop = await this.findShop(createOrderDto.shopId);
       const menuItems = await this.menuItemsRepository.find({
         where: { id: In(createOrderDto.items.map((item) => item.menuItemId)) },
@@ -172,6 +176,23 @@ export class OrdersService {
         relations: { shop: true, employee: true, items: { menuItem: true } },
       });
     });
+
+    if (createdOrder) {
+      await this.kafkaProducer.publish(
+        KafkaTopic.ORDER_CREATED,
+        createDomainEvent(KafkaTopic.ORDER_CREATED, {
+          orderId: createdOrder.id,
+          orderNumber: createdOrder.orderNumber,
+          shopId: createdOrder.shop.id,
+          status: createdOrder.status,
+          totalAmount: createdOrder.totalAmount,
+          itemCount: createdOrder.items?.length ?? 0,
+        }),
+        createdOrder.id,
+      );
+    }
+
+    return createdOrder;
   }
 
   findAll() {
@@ -196,6 +217,7 @@ export class OrdersService {
 
   async updateStatus(id: string, updateOrderStatusDto: UpdateOrderStatusDto) {
     const order = await this.findOne(id);
+    const previousStatus = order.status;
 
     if (
       !this.allowedTransitions[order.status].includes(
@@ -208,18 +230,47 @@ export class OrdersService {
     }
 
     order.status = updateOrderStatusDto.status;
-    return this.ordersRepository.save(order);
+    const updatedOrder = await this.ordersRepository.save(order);
+
+    await this.kafkaProducer.publish(
+      KafkaTopic.ORDER_UPDATED,
+      createDomainEvent(KafkaTopic.ORDER_UPDATED, {
+        orderId: updatedOrder.id,
+        orderNumber: updatedOrder.orderNumber,
+        shopId: updatedOrder.shop.id,
+        previousStatus,
+        status: updatedOrder.status,
+      }),
+      updatedOrder.id,
+    );
+
+    return updatedOrder;
   }
 
   async cancel(id: string) {
     const order = await this.findOne(id);
+    const previousStatus = order.status;
 
     if (order.status !== OrderStatus.PENDING) {
       throw new BadRequestException('Only pending orders can be cancelled');
     }
 
     order.status = OrderStatus.CANCELLED;
-    return this.ordersRepository.save(order);
+    const cancelledOrder = await this.ordersRepository.save(order);
+
+    await this.kafkaProducer.publish(
+      KafkaTopic.ORDER_CANCELLED,
+      createDomainEvent(KafkaTopic.ORDER_CANCELLED, {
+        orderId: cancelledOrder.id,
+        orderNumber: cancelledOrder.orderNumber,
+        shopId: cancelledOrder.shop.id,
+        previousStatus,
+        status: OrderStatus.CANCELLED,
+      }),
+      cancelledOrder.id,
+    );
+
+    return cancelledOrder;
   }
 
   private async findShop(id: string) {

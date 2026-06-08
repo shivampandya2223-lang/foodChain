@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { KafkaTopic } from '../common/enums/kafka-topic.enum';
+import { createDomainEvent } from '../kafka/kafka-event.factory';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { User } from '../users/entities/user.entity';
 import { AssignShopUsersDto } from './dto/assign-shop-users.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
@@ -18,6 +21,7 @@ export class ShopsService {
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
   async create(createShopDto: CreateShopDto) {
@@ -37,7 +41,20 @@ export class ShopsService {
       users: owner ? [owner] : [],
     });
 
-    return this.shopsRepository.save(shop);
+    const savedShop = await this.shopsRepository.save(shop);
+
+    await this.kafkaProducer.publish(
+      KafkaTopic.SHOP_CREATED,
+      createDomainEvent(KafkaTopic.SHOP_CREATED, {
+        shopId: savedShop.id,
+        name: savedShop.name,
+        slug: savedShop.slug,
+        ownerId: savedShop.owner?.id,
+      }),
+      savedShop.id,
+    );
+
+    return savedShop;
   }
 
   findAll() {

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
+import { KafkaModule } from '../kafka/kafka.module';
 import { MenuItem } from '../menu/entities/menu-item.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
@@ -21,6 +22,7 @@ import { OrdersService } from './orders.service';
       InventoryTransaction,
       User,
     ]),
+    KafkaModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

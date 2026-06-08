@@ -12,6 +12,7 @@ import { Permission } from '../permissions/entities/permission.entity';
 import { Product } from '../products/entities/product.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
+import { DomainEventLog } from '../storage/entities/domain-event-log.entity';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SystemSetting } from '../settings/entities/system-setting.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -45,6 +46,7 @@ import { SeedService } from './seed.service';
           OrderItem,
           Task,
           SystemSetting,
+          DomainEventLog,
         ],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
@@ -60,6 +62,7 @@ import { SeedService } from './seed.service';
       MenuRecipeItem,
       Device,
       Task,
+      DomainEventLog,
     ]),
   ],
   providers: [SeedService],

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-premium-dashboard",
+    "rootDir": "."
+  },
+  "include": [
+    "apps/premium-dashboard/src/**/*.ts",
+    "src/config/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "dist-*", "**/*.spec.ts"]
+}

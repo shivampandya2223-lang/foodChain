@@ -6,8 +6,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
-import { InventoryTransactionType } from '../common/enums/inventory-transaction-type.enum';
 import { InventoryTransactionSource } from '../common/enums/inventory-transaction-source.enum';
+import { InventoryTransactionType } from '../common/enums/inventory-transaction-type.enum';
+import { KafkaTopic } from '../common/enums/kafka-topic.enum';
+import { createDomainEvent } from '../kafka/kafka-event.factory';
+import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { User } from '../users/entities/user.entity';
 import { StockMovementDto } from './dto/stock-movement.dto';
 import { InventoryItem } from './entities/inventory-item.entity';
@@ -23,6 +26,7 @@ export class InventoryService {
     private readonly transactionsRepository: Repository<InventoryTransaction>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
   findAll() {
@@ -75,10 +79,10 @@ export class InventoryService {
       throw new BadRequestException('Quantity must be greater than zero');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const inventoryItem = await manager.findOne(InventoryItem, {
         where: { id: stockMovementDto.inventoryItemId },
-        relations: { shop: true },
+        relations: { product: true, shop: true },
       });
 
       if (!inventoryItem) {
@@ -124,5 +128,28 @@ export class InventoryService {
         transaction,
       };
     });
+
+    const topic =
+      type === InventoryTransactionType.STOCK_IN
+        ? KafkaTopic.INVENTORY_STOCK_IN
+        : KafkaTopic.INVENTORY_STOCK_OUT;
+
+    await this.kafkaProducer.publish(
+      topic,
+      createDomainEvent(topic, {
+        inventoryItemId: result.inventoryItem.id,
+        productId: result.inventoryItem.product.id,
+        shopId: result.inventoryItem.shop.id,
+        type: result.transaction.type,
+        source: result.transaction.source,
+        referenceId: result.transaction.referenceId,
+        quantity: result.transaction.quantity,
+        quantityBefore: result.transaction.quantityBefore,
+        quantityAfter: result.transaction.quantityAfter,
+      }),
+      result.inventoryItem.id,
+    );
+
+    return result;
   }
 }
