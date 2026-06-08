@@ -9,12 +9,16 @@ import {
   RoleType,
 } from '../common/enums/role.enum';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
+import { DeviceType } from '../common/enums/device-type.enum';
+import { TaskStatus } from '../common/enums/task-status.enum';
+import { Device } from '../devices/entities/device.entity';
 import { MenuItem } from '../menu/entities/menu-item.entity';
 import { MenuRecipeItem } from '../menu/entities/menu-recipe-item.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Product } from '../products/entities/product.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
+import { Task } from '../tasks/entities/task.entity';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
@@ -37,6 +41,10 @@ export class SeedService {
     private readonly menuItemsRepository: Repository<MenuItem>,
     @InjectRepository(MenuRecipeItem)
     private readonly recipeItemsRepository: Repository<MenuRecipeItem>,
+    @InjectRepository(Device)
+    private readonly devicesRepository: Repository<Device>,
+    @InjectRepository(Task)
+    private readonly tasksRepository: Repository<Task>,
   ) {}
 
   async run() {
@@ -48,6 +56,8 @@ export class SeedService {
     const shop = await this.seedShop(superAdmin);
     const products = await this.seedProducts(shop);
     const menuItem = await this.seedMenu(shop, products);
+    const devices = await this.seedDevices(shop);
+    const tasks = await this.seedTasks(shop, superAdmin);
 
     return {
       permissions: permissions.size,
@@ -56,6 +66,8 @@ export class SeedService {
       shop: shop.slug,
       products: products.length,
       menuItem: menuItem.name,
+      devices: devices.length,
+      tasks: tasks.length,
     };
   }
 
@@ -293,5 +305,69 @@ export class SeedService {
     }
 
     return menuItem;
+  }
+
+  private async seedDevices(shop: Shop) {
+    const devicesToSeed = [
+      {
+        name: 'Order Device',
+        type: DeviceType.ORDER_DEVICE,
+        deviceKey: 'demo-order-device',
+      },
+      {
+        name: 'Stock Device',
+        type: DeviceType.STOCK_DEVICE,
+        deviceKey: 'demo-stock-device',
+      },
+    ];
+
+    const devices: Device[] = [];
+
+    for (const deviceToSeed of devicesToSeed) {
+      let device = await this.devicesRepository.findOne({
+        where: { deviceKey: deviceToSeed.deviceKey },
+      });
+
+      if (!device) {
+        device = await this.devicesRepository.save(
+          this.devicesRepository.create({
+            ...deviceToSeed,
+            shop,
+          }),
+        );
+      }
+
+      devices.push(device);
+    }
+
+    return devices;
+  }
+
+  private async seedTasks(shop: Shop, assignedTo: User) {
+    const tasksToSeed = [
+      'Refill Cheese Stock',
+      'Clean Kitchen',
+      'Check Freezer Temperature',
+    ];
+    const tasks: Task[] = [];
+
+    for (const title of tasksToSeed) {
+      let task = await this.tasksRepository.findOne({ where: { title } });
+
+      if (!task) {
+        task = await this.tasksRepository.save(
+          this.tasksRepository.create({
+            title,
+            status: TaskStatus.TODO,
+            shop,
+            assignedTo,
+          }),
+        );
+      }
+
+      tasks.push(task);
+    }
+
+    return tasks;
   }
 }

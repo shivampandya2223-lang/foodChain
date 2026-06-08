@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
+import { DevicesModule } from './devices/devices.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
@@ -25,6 +26,7 @@ import { UsersModule } from './users/users.module';
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,
+    DevicesModule,
     AuthModule,
     UsersModule,
     RolesModule,

@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { InventoryTransactionType } from '../common/enums/inventory-transaction-type.enum';
+import { InventoryTransactionSource } from '../common/enums/inventory-transaction-source.enum';
 import { User } from '../users/entities/user.entity';
 import { StockMovementDto } from './dto/stock-movement.dto';
 import { InventoryItem } from './entities/inventory-item.entity';
@@ -107,6 +108,10 @@ export class InventoryService {
         quantityBefore: quantityBefore.toFixed(3),
         quantityAfter: quantityAfter.toFixed(3),
         reason: stockMovementDto.reason,
+        source:
+          type === InventoryTransactionType.STOCK_IN
+            ? InventoryTransactionSource.PURCHASE
+            : InventoryTransactionSource.MANUAL,
         shop: inventoryItem.shop,
         inventoryItem,
         createdBy: createdBy ?? undefined,

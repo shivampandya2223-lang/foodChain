@@ -7,6 +7,7 @@ import {
   OneToOne,
 } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
+import { Device } from '../../devices/entities/device.entity';
 import { InventoryItem } from '../../inventory/entities/inventory-item.entity';
 import { MenuItem } from '../../menu/entities/menu-item.entity';
 import { Order } from '../../orders/entities/order.entity';
@@ -58,4 +59,7 @@ export class Shop extends BaseEntity {
 
   @OneToMany(() => Task, (task) => task.shop)
   tasks: Task[];
+
+  @OneToMany(() => Device, (device) => device.shop)
+  devices: Device[];
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Device } from '../devices/entities/device.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
 import { MenuItem } from '../menu/entities/menu-item.entity';
@@ -39,6 +40,7 @@ import { SeedService } from './seed.service';
           InventoryTransaction,
           MenuItem,
           MenuRecipeItem,
+          Device,
           Order,
           OrderItem,
           Task,
@@ -56,6 +58,8 @@ import { SeedService } from './seed.service';
       InventoryItem,
       MenuItem,
       MenuRecipeItem,
+      Device,
+      Task,
     ]),
   ],
   providers: [SeedService],

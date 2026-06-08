@@ -1,6 +1,6 @@
 import { Column, Entity, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
-import { Product } from '../../products/entities/product.entity';
+import { MenuItem } from '../../menu/entities/menu-item.entity';
 import { Order } from './order.entity';
 
 @Entity('order_items')
@@ -17,6 +17,6 @@ export class OrderItem extends BaseEntity {
   @ManyToOne(() => Order, (order) => order.items, { onDelete: 'CASCADE' })
   order: Order;
 
-  @ManyToOne(() => Product, { nullable: true, onDelete: 'SET NULL' })
-  product?: Product;
+  @ManyToOne(() => MenuItem, { nullable: true, onDelete: 'SET NULL' })
+  menuItem?: MenuItem;
 }
