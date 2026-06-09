@@ -1,0 +1,11 @@
+{
+  "name": "@food-chain/analytics-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist-analytics-service/apps/analytics-service/src/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build:analytics",
+    "start": "cd ../.. && ENV_FILE=apps/analytics-service/.env npm run start:analytics:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/analytics-service/.env npm run start:analytics"
+  }
+}

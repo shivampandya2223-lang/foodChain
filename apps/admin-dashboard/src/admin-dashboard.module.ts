@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { getEnvFilePaths } from '../../../src/config/env-file-paths';
 import { envValidationSchema } from '../../../src/config/env.validation';
 import { DatabaseModule } from '../../../src/database/database.module';
 import { StorageModule } from '../../../src/storage/storage.module';
@@ -10,7 +11,7 @@ import { AdminDashboardService } from './admin-dashboard.service';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: getEnvFilePaths('admin-dashboard'),
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,

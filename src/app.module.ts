@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { getEnvFilePaths } from './config/env-file-paths';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { DevicesModule } from './devices/devices.module';
@@ -24,7 +25,7 @@ import { UsersModule } from './users/users.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: getEnvFilePaths('api-gateway'),
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,

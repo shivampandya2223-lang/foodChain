@@ -1,0 +1,11 @@
+{
+  "name": "@food-chain/premium-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist-premium-dashboard/apps/premium-dashboard/src/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build:premium-dashboard",
+    "start": "cd ../.. && ENV_FILE=apps/premium-dashboard/.env npm run start:premium-dashboard:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/premium-dashboard/.env npm run start:premium-dashboard"
+  }
+}

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { getEnvFilePaths } from '../../../src/config/env-file-paths';
 import { envValidationSchema } from '../../../src/config/env.validation';
 import { AnalyticsConsumerService } from './analytics-consumer.service';
 import { AnalyticsController } from './analytics.controller';
@@ -8,7 +9,7 @@ import { AnalyticsController } from './analytics.controller';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: getEnvFilePaths('analytics-service'),
       validationSchema: envValidationSchema,
     }),
   ],

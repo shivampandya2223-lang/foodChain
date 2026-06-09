@@ -1,0 +1,11 @@
+{
+  "name": "@food-chain/admin-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist-admin-dashboard/apps/admin-dashboard/src/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build:dashboard",
+    "start": "cd ../.. && ENV_FILE=apps/admin-dashboard/.env npm run start:dashboard:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/admin-dashboard/.env npm run start:dashboard"
+  }
+}

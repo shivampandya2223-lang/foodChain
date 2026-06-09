@@ -62,6 +62,39 @@ npm run start:dashboard
 npm run start:premium-dashboard
 ```
 
+Each deployable server also has its own env and package file:
+
+```text
+apps/api-gateway/.env.example
+apps/inventory-service/.env.example
+apps/notification-service/.env.example
+apps/analytics-service/.env.example
+apps/admin-dashboard/.env.example
+apps/premium-dashboard/.env.example
+
+apps/api-gateway/package.json
+apps/inventory-service/package.json
+apps/notification-service/package.json
+apps/analytics-service/package.json
+apps/admin-dashboard/package.json
+apps/premium-dashboard/package.json
+```
+
+The runtime env resolution order is:
+
+```text
+ENV_FILE
+apps/<service>/.env.local
+apps/<service>/.env
+.env
+```
+
+Use `ENV_FILE` on real servers when your hosting platform mounts secrets somewhere else:
+
+```bash
+ENV_FILE=/etc/food-chain/inventory.env npm run start:inventory:prod
+```
+
 Production builds:
 
 ```bash
@@ -76,6 +109,16 @@ npm run start:notification:prod
 npm run start:analytics:prod
 npm run start:dashboard:prod
 npm run start:premium-dashboard:prod
+```
+
+Per-service package commands:
+
+```bash
+cd apps/inventory-service && npm run build && npm run start
+cd apps/notification-service && npm run build && npm run start
+cd apps/analytics-service && npm run build && npm run start
+cd apps/admin-dashboard && npm run build && npm run start
+cd apps/premium-dashboard && npm run build && npm run start
 ```
 
 Default service URLs:

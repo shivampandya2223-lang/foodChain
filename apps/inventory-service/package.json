@@ -1,0 +1,11 @@
+{
+  "name": "@food-chain/inventory-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist-inventory-service/apps/inventory-service/src/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build:inventory",
+    "start": "cd ../.. && ENV_FILE=apps/inventory-service/.env npm run start:inventory:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/inventory-service/.env npm run start:inventory"
+  }
+}

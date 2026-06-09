@@ -1,0 +1,11 @@
+{
+  "name": "@food-chain/notification-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist-notification-service/apps/notification-service/src/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build:notification",
+    "start": "cd ../.. && ENV_FILE=apps/notification-service/.env npm run start:notification:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/notification-service/.env npm run start:notification"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@food-chain/api-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "main": "../../dist/main.js",
+  "scripts": {
+    "build": "cd ../.. && npm run build",
+    "start": "cd ../.. && ENV_FILE=apps/api-gateway/.env npm run start:prod",
+    "start:dev": "cd ../.. && ENV_FILE=apps/api-gateway/.env npm run start:dev",
+    "seed": "cd ../.. && ENV_FILE=apps/api-gateway/.env npm run seed"
+  }
+}

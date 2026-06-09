@@ -4,9 +4,13 @@
   "description": "",
   "author": "",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:all": "npm run build && npm run build:inventory && npm run build:notification && npm run build:analytics && npm run build:dashboard && npm run build:premium-dashboard",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
