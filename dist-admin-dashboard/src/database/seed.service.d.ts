@@ -1,0 +1,45 @@
+import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
+import { InventoryItem } from '../inventory/entities/inventory-item.entity';
+import { Device } from '../devices/entities/device.entity';
+import { MenuItem } from '../menu/entities/menu-item.entity';
+import { MenuRecipeItem } from '../menu/entities/menu-recipe-item.entity';
+import { Permission } from '../permissions/entities/permission.entity';
+import { Product } from '../products/entities/product.entity';
+import { Role } from '../roles/entities/role.entity';
+import { Shop } from '../shops/entities/shop.entity';
+import { Task } from '../tasks/entities/task.entity';
+import { User } from '../users/entities/user.entity';
+export declare class SeedService {
+    private readonly configService;
+    private readonly permissionsRepository;
+    private readonly rolesRepository;
+    private readonly usersRepository;
+    private readonly shopsRepository;
+    private readonly productsRepository;
+    private readonly inventoryItemsRepository;
+    private readonly menuItemsRepository;
+    private readonly recipeItemsRepository;
+    private readonly devicesRepository;
+    private readonly tasksRepository;
+    constructor(configService: ConfigService, permissionsRepository: Repository<Permission>, rolesRepository: Repository<Role>, usersRepository: Repository<User>, shopsRepository: Repository<Shop>, productsRepository: Repository<Product>, inventoryItemsRepository: Repository<InventoryItem>, menuItemsRepository: Repository<MenuItem>, recipeItemsRepository: Repository<MenuRecipeItem>, devicesRepository: Repository<Device>, tasksRepository: Repository<Task>);
+    run(): Promise<{
+        permissions: number;
+        roles: number;
+        superAdmin: string;
+        shop: string;
+        products: number;
+        menuItem: string;
+        devices: number;
+        tasks: number;
+    }>;
+    private seedPermissions;
+    private seedRoles;
+    private seedSuperAdmin;
+    private seedShop;
+    private humanize;
+    private seedProducts;
+    private seedMenu;
+    private seedDevices;
+    private seedTasks;
+}
