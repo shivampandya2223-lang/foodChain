@@ -64,9 +64,12 @@ export class AdminDashboardService
   ) {}
 
   async onModuleInit() {
-    if (!this.isKafkaEnabled()) {
+    if (!this.isKafkaEnabled() || this.isDemoPersistenceEnabled()) {
       this.hydrateDemoData();
       this.startDemoEventStream();
+    }
+
+    if (!this.isKafkaEnabled()) {
       this.logger.log('Kafka dashboard consumer disabled');
       return;
     }

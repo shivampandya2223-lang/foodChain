@@ -10,5 +10,6 @@ export declare class KafkaProducerService implements OnModuleInit, OnApplication
     constructor(configService: ConfigService);
     onModuleInit(): Promise<void>;
     publish<TPayload extends Record<string, unknown>>(topic: KafkaTopic, event: DomainEvent<TPayload>, key?: string): Promise<void>;
+    canPublish(): boolean;
     onApplicationShutdown(): Promise<void>;
 }

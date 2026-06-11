@@ -16,6 +16,8 @@ export declare class RedisCacheService implements OnModuleInit, OnApplicationShu
         lastError: string | undefined;
     };
     setJson(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
+    getJson<TValue>(key: string): Promise<TValue | undefined>;
+    delete(key: string): Promise<void>;
     incrementHashBy(key: string, field: string, amount: number): Promise<void>;
     private isEnabled;
 }

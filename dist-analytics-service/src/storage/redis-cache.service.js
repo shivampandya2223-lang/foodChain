@@ -72,6 +72,22 @@ let RedisCacheService = RedisCacheService_1 = class RedisCacheService {
         }
         await this.client.set(key, serialized);
     }
+    async getJson(key) {
+        if (!this.client?.isOpen) {
+            return undefined;
+        }
+        const value = await this.client.get(key);
+        if (!value) {
+            return undefined;
+        }
+        return JSON.parse(value);
+    }
+    async delete(key) {
+        if (!this.client?.isOpen) {
+            return;
+        }
+        await this.client.del(key);
+    }
     async incrementHashBy(key, field, amount) {
         if (!this.client?.isOpen) {
             return;

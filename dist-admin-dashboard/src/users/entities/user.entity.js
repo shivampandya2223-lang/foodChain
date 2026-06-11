@@ -10,6 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.User = void 0;
+const class_transformer_1 = require("class-transformer");
 const typeorm_1 = require("typeorm");
 const base_entity_1 = require("../../database/base.entity");
 const order_entity_1 = require("../../orders/entities/order.entity");
@@ -37,6 +38,7 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "email", void 0);
 __decorate([
+    (0, class_transformer_1.Exclude)(),
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
 ], User.prototype, "passwordHash", void 0);

@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const device_entity_1 = require("../devices/entities/device.entity");
+const outbox_event_entity_1 = require("../events/entities/outbox-event.entity");
 const inventory_item_entity_1 = require("../inventory/entities/inventory-item.entity");
 const inventory_transaction_entity_1 = require("../inventory/entities/inventory-transaction.entity");
 const menu_item_entity_1 = require("../menu/entities/menu-item.entity");
@@ -37,11 +38,6 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => ({
                     type: 'postgres',
-                    host: configService.getOrThrow('DB_HOST'),
-                    port: configService.getOrThrow('DB_PORT'),
-                    username: configService.getOrThrow('DB_USERNAME'),
-                    password: configService.getOrThrow('DB_PASSWORD'),
-                    database: configService.getOrThrow('DB_NAME'),
                     entities: [
                         user_entity_1.User,
                         role_entity_1.Role,
@@ -59,8 +55,10 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                         task_entity_1.Task,
                         system_setting_entity_1.SystemSetting,
                         domain_event_log_entity_1.DomainEventLog,
+                        outbox_event_entity_1.OutboxEvent,
                     ],
                     synchronize: configService.get('NODE_ENV') !== 'production',
+                    ...buildConnectionTarget(configService),
                 }),
             }),
             typeorm_1.TypeOrmModule.forFeature([
@@ -75,10 +73,50 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 device_entity_1.Device,
                 task_entity_1.Task,
                 domain_event_log_entity_1.DomainEventLog,
+                outbox_event_entity_1.OutboxEvent,
             ]),
         ],
         providers: [seed_service_1.SeedService],
         exports: [seed_service_1.SeedService],
     })
 ], DatabaseModule);
+function buildConnectionTarget(configService) {
+    const replicaHosts = configService
+        .get('DB_REPLICA_HOSTS', '')
+        .split(',')
+        .map((host) => host.trim())
+        .filter(Boolean);
+    if (!replicaHosts.length) {
+        return {
+            host: configService.getOrThrow('DB_HOST'),
+            port: configService.getOrThrow('DB_PORT'),
+            username: configService.getOrThrow('DB_USERNAME'),
+            password: configService.getOrThrow('DB_PASSWORD'),
+            database: configService.getOrThrow('DB_NAME'),
+        };
+    }
+    const port = configService.getOrThrow('DB_PORT');
+    const username = configService.getOrThrow('DB_USERNAME');
+    const password = configService.getOrThrow('DB_PASSWORD');
+    const database = configService.getOrThrow('DB_NAME');
+    return {
+        replication: {
+            master: {
+                host: configService.get('DB_PRIMARY_HOST') ||
+                    configService.getOrThrow('DB_HOST'),
+                port,
+                username,
+                password,
+                database,
+            },
+            slaves: replicaHosts.map((host) => ({
+                host,
+                port,
+                username,
+                password,
+                database,
+            })),
+        },
+    };
+}
 //# sourceMappingURL=database.module.js.map
