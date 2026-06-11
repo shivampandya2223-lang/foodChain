@@ -10,8 +10,7 @@ import { In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { RoleType } from '../common/enums/role.enum';
-import { createDomainEvent } from '../kafka/kafka-event.factory';
-import { KafkaProducerService } from '../kafka/kafka-producer.service';
+import { OutboxService } from '../events/outbox.service';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -28,7 +27,7 @@ export class UsersService {
     private readonly rolesRepository: Repository<Role>,
     @InjectRepository(Shop)
     private readonly shopsRepository: Repository<Shop>,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async create(createUserDto: CreateUserDto, creator?: AuthenticatedUser) {
@@ -73,16 +72,20 @@ export class UsersService {
 
     const savedUser = await this.usersRepository.save(user);
 
-    await this.kafkaProducer.publish(
+    await this.outboxService.enqueue(
       KafkaTopic.USER_CREATED,
-      createDomainEvent(KafkaTopic.USER_CREATED, {
+      {
         userId: savedUser.id,
         email: savedUser.email,
         roles: roles.map((role) => role.name),
         shopIds: shops.map((shop) => shop.id),
         createdById: createdBy?.id,
-      }),
-      savedUser.id,
+      },
+      {
+        aggregateId: savedUser.id,
+        aggregateType: 'User',
+        partitionKey: shops[0]?.id ?? savedUser.id,
+      },
     );
 
     return this.toSafeUser(savedUser);

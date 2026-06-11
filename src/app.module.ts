@@ -7,8 +7,8 @@ import { getEnvFilePaths } from './config/env-file-paths';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { DevicesModule } from './devices/devices.module';
+import { EventsModule } from './events/events.module';
 import { InventoryModule } from './inventory/inventory.module';
-import { KafkaModule } from './kafka/kafka.module';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
 import { PermissionsModule } from './permissions/permissions.module';
@@ -30,6 +30,7 @@ import { UsersModule } from './users/users.module';
     }),
     DatabaseModule,
     StorageModule,
+    EventsModule,
     DevicesModule,
     AuthModule,
     UsersModule,
@@ -39,7 +40,6 @@ import { UsersModule } from './users/users.module';
     SubscriptionsModule,
     ProductsModule,
     InventoryModule,
-    KafkaModule,
     MenuModule,
     OrdersModule,
     TasksModule,

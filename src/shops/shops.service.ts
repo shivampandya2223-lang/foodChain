@@ -6,8 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { KafkaTopic } from '../common/enums/kafka-topic.enum';
-import { createDomainEvent } from '../kafka/kafka-event.factory';
-import { KafkaProducerService } from '../kafka/kafka-producer.service';
+import { OutboxService } from '../events/outbox.service';
 import { User } from '../users/entities/user.entity';
 import { AssignShopUsersDto } from './dto/assign-shop-users.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
@@ -21,7 +20,7 @@ export class ShopsService {
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async create(createShopDto: CreateShopDto) {
@@ -43,15 +42,19 @@ export class ShopsService {
 
     const savedShop = await this.shopsRepository.save(shop);
 
-    await this.kafkaProducer.publish(
+    await this.outboxService.enqueue(
       KafkaTopic.SHOP_CREATED,
-      createDomainEvent(KafkaTopic.SHOP_CREATED, {
+      {
         shopId: savedShop.id,
         name: savedShop.name,
         slug: savedShop.slug,
         ownerId: savedShop.owner?.id,
-      }),
-      savedShop.id,
+      },
+      {
+        aggregateId: savedShop.id,
+        aggregateType: 'Shop',
+        partitionKey: savedShop.id,
+      },
     );
 
     return savedShop;

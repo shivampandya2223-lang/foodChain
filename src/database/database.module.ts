@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
 import { Device } from '../devices/entities/device.entity';
+import { OutboxEvent } from '../events/entities/outbox-event.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
 import { MenuItem } from '../menu/entities/menu-item.entity';
@@ -25,11 +27,6 @@ import { SeedService } from './seed.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.getOrThrow<string>('DB_HOST'),
-        port: configService.getOrThrow<number>('DB_PORT'),
-        username: configService.getOrThrow<string>('DB_USERNAME'),
-        password: configService.getOrThrow<string>('DB_PASSWORD'),
-        database: configService.getOrThrow<string>('DB_NAME'),
         entities: [
           User,
           Role,
@@ -47,8 +44,10 @@ import { SeedService } from './seed.service';
           Task,
           SystemSetting,
           DomainEventLog,
+          OutboxEvent,
         ],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
+        ...buildConnectionTarget(configService),
       }),
     }),
     TypeOrmModule.forFeature([
@@ -63,9 +62,56 @@ import { SeedService } from './seed.service';
       Device,
       Task,
       DomainEventLog,
+      OutboxEvent,
     ]),
   ],
   providers: [SeedService],
   exports: [SeedService],
 })
 export class DatabaseModule {}
+
+function buildConnectionTarget(
+  configService: ConfigService,
+): Partial<PostgresConnectionOptions> {
+  const replicaHosts = configService
+    .get<string>('DB_REPLICA_HOSTS', '')
+    .split(',')
+    .map((host) => host.trim())
+    .filter(Boolean);
+
+  if (!replicaHosts.length) {
+    return {
+      host: configService.getOrThrow<string>('DB_HOST'),
+      port: configService.getOrThrow<number>('DB_PORT'),
+      username: configService.getOrThrow<string>('DB_USERNAME'),
+      password: configService.getOrThrow<string>('DB_PASSWORD'),
+      database: configService.getOrThrow<string>('DB_NAME'),
+    };
+  }
+
+  const port = configService.getOrThrow<number>('DB_PORT');
+  const username = configService.getOrThrow<string>('DB_USERNAME');
+  const password = configService.getOrThrow<string>('DB_PASSWORD');
+  const database = configService.getOrThrow<string>('DB_NAME');
+
+  return {
+    replication: {
+      master: {
+        host:
+          configService.get<string>('DB_PRIMARY_HOST') ||
+          configService.getOrThrow<string>('DB_HOST'),
+        port,
+        username,
+        password,
+        database,
+      },
+      slaves: replicaHosts.map((host) => ({
+        host,
+        port,
+        username,
+        password,
+        database,
+      })),
+    },
+  };
+}

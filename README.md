@@ -8,6 +8,7 @@ Food Chain is a NestJS backend for running a food-shop or restaurant chain. It m
 - PostgreSQL with TypeORM
 - JWT authentication with role and permission guards
 - KafkaJS for domain events
+- Transactional outbox for reliable Kafka publishing
 - Redis and MongoDB as optional dashboard/event stores
 - Swagger at `/docs`
 
@@ -21,6 +22,121 @@ Food Chain is a NestJS backend for running a food-shop or restaurant chain. It m
 | Analytics service | `npm run start:analytics` | `http://localhost:1308` |
 | Admin dashboard | `npm run start:dashboard` | `http://localhost:1309` |
 | Premium dashboard | `npm run start:premium-dashboard` | `http://localhost:1310` |
+
+## Project Structure
+
+The repository is organized as a NestJS monorepo. The root `src/` folder contains the main API gateway and shared domain modules. The `apps/` folder contains separately runnable services and dashboards that can be deployed independently as the architecture grows.
+
+```text
+food-chain/
+├── apps/
+│   ├── api-gateway/              # Environment/package wrapper for the main API
+│   ├── inventory-service/        # Kafka consumer for inventory/order events
+│   ├── notification-service/     # Kafka consumer for notification workflows
+│   ├── analytics-service/        # Kafka consumer for analytics/read models
+│   ├── admin-dashboard/          # Internal dashboard API + SSE stream
+│   └── premium-dashboard/        # Premium dashboard UI shell
+├── src/
+│   ├── auth/                     # Login, JWT strategy, guards, decorators
+│   ├── common/                   # Shared enums, guards, filters, interceptors
+│   ├── config/                   # Env loading and validation
+│   ├── contracts/                # Shared event contracts
+│   ├── database/                 # TypeORM setup and seed service
+│   ├── events/                   # Transactional outbox and event publishing
+│   ├── inventory/                # Inventory items, stock moves, transactions
+│   ├── kafka/                    # Kafka client and producer
+│   ├── menu/                     # Menu items and recipe ingredients
+│   ├── orders/                   # Orders, status flow, stock deduction/restore
+│   ├── products/                 # Products and linked inventory records
+│   ├── shops/                    # Shop lifecycle and user assignment
+│   ├── storage/                  # Redis, MongoDB, Postgres event stores
+│   ├── tasks/                    # Employee task management
+│   ├── users/                    # User creation, profile, scoped reads
+│   └── main.ts                   # Main API bootstrap
+├── docs/
+├── test/
+├── docker-compose.yml
+├── package.json
+└── tsconfig*.json
+```
+
+Most API modules follow this pattern:
+
+```text
+<module>/
+├── dto/                          # Request payload validation classes
+├── entities/                     # TypeORM entities
+├── <module>.controller.ts        # HTTP endpoints and guards
+├── <module>.service.ts           # Business logic and transactions
+└── <module>.module.ts            # Nest module wiring
+```
+
+## Implemented Scaling Improvements
+
+This project now includes the first production-scaling changes from the architecture plan:
+
+- Redis JWT cache: `JwtStrategy` checks `auth:user:<userId>` before loading the user/roles/permissions from PostgreSQL. Cached auth payloads expire after 5 minutes.
+- TypeORM read replicas: set `DB_REPLICA_HOSTS` to enable TypeORM replication. Reads can go to replicas while writes and transactions stay on the primary.
+- Transactional outbox: domain services enqueue events in `outbox_events`; `OutboxPublisherService` publishes pending events to Kafka asynchronously.
+- Kafka partition keys: outbox events use `shopId` where available so a shop's events stay ordered while different shops process in parallel.
+
+```text
+Client
+  │
+  ▼
+API Pod (NestJS)
+  │
+  ├─ 1. Validate JWT from Redis cache
+  ├─ 2. Begin PostgreSQL transaction on primary
+  │     ├─ Lock inventory rows
+  │     ├─ Deduct or restore inventory
+  │     ├─ Save order/inventory records
+  │     └─ Write outbox event with status=PENDING
+  ├─ 3. Commit transaction
+  └─ 4. Return response without waiting for Kafka
+
+Async worker:
+  OutboxPublisherService polls pending events
+    └─ Publishes to Kafka
+       ├─ Inventory service consumes events
+       ├─ Notification service consumes events
+       └─ Analytics service updates reporting/read models
+```
+
+## Production Architecture Target
+
+```text
+                         ┌─────────────────────────────────┐
+                         │         Load Balancer            │
+                         │      (Nginx / AWS ALB)           │
+                         └────────────┬────────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+        ┌─────▼─────┐          ┌──────▼─────┐         ┌──────▼─────┐
+        │ API Pod 1 │          │ API Pod 2  │         │ API Pod N  │
+        │ NestJS    │          │ NestJS     │         │ NestJS     │
+        └─────┬─────┘          └─────┬──────┘         └─────┬──────┘
+              │                      │                      │
+              └──────────────────────┼──────────────────────┘
+                                     │
+        ┌────────────────────────────┼─────────────────────────────┐
+        │                            │                             │
+   ┌────▼─────┐               ┌──────▼──────┐              ┌───────▼──────┐
+   │ Redis    │               │ PostgreSQL  │              │ Kafka        │
+   │ Cluster  │               │ Primary     │              │ Cluster      │
+   │ Cache +  │               │ + Replicas  │              │ 3+ Brokers   │
+   │ Sessions │               │ PgBouncer   │              │              │
+   └──────────┘               └─────────────┘              └──────┬───────┘
+                                                                  │
+                              ┌───────────────────────────────────┤
+                              │                   │               │
+                     ┌────────▼──────┐   ┌────────▼──────┐ ┌──────▼──────┐
+                     │ Inventory     │   │ Notification  │ │ Analytics   │
+                     │ Service       │   │ Service       │ │ Service     │
+                     │ Own DB/Model  │   │ Own DB/Model  │ │ MongoDB     │
+                     └───────────────┘   └───────────────┘ └─────────────┘
+```
 
 ## Setup
 
@@ -39,11 +155,15 @@ PostgreSQL is required separately. The local `.env` expects:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
+DB_PRIMARY_HOST=
+DB_REPLICA_HOSTS=
 DB_USERNAME=postgres
 DB_PASSWORD=PASSWORD
 DB_NAME=food_chain
 JWT_SECRET=food-chain-local-development-secret
 ```
+
+For production read replicas, set `DB_PRIMARY_HOST` and comma-separated `DB_REPLICA_HOSTS`. If `DB_REPLICA_HOSTS` is empty, the app uses the single `DB_HOST` connection.
 
 Run database seed data:
 
@@ -1298,6 +1418,10 @@ Enable Kafka and optional stores in `.env`:
 ```env
 KAFKA_ENABLED=true
 KAFKA_BROKERS=localhost:9092
+OUTBOX_PUBLISHER_ENABLED=true
+OUTBOX_POLL_INTERVAL_MS=100
+OUTBOX_BATCH_SIZE=100
+OUTBOX_MAX_ATTEMPTS=3
 REDIS_ENABLED=true
 REDIS_URL=redis://localhost:6379
 MONGO_ENABLED=true
@@ -1305,6 +1429,10 @@ MONGO_URI=mongodb://localhost:27017
 MONGO_DB_NAME=food_chain_events
 MONGO_EVENTS_COLLECTION=domain_events
 ```
+
+API services do not publish domain events directly from request handlers. They enqueue events into `outbox_events`; the outbox publisher sends them to Kafka asynchronously. If Kafka is disabled or unavailable, pending events stay in PostgreSQL until the publisher can send them.
+
+JWT validation uses Redis when `REDIS_ENABLED=true`. The key format is `auth:user:<userId>` and cached auth payloads expire after 5 minutes.
 
 More detail is available in [docs/kafka-events.md](docs/kafka-events.md).
 

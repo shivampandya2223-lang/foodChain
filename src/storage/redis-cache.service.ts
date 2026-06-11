@@ -75,6 +75,28 @@ export class RedisCacheService implements OnModuleInit, OnApplicationShutdown {
     await this.client.set(key, serialized);
   }
 
+  async getJson<TValue>(key: string): Promise<TValue | undefined> {
+    if (!this.client?.isOpen) {
+      return undefined;
+    }
+
+    const value = await this.client.get(key);
+
+    if (!value) {
+      return undefined;
+    }
+
+    return JSON.parse(value) as TValue;
+  }
+
+  async delete(key: string) {
+    if (!this.client?.isOpen) {
+      return;
+    }
+
+    await this.client.del(key);
+  }
+
   async incrementHashBy(key: string, field: string, amount: number) {
     if (!this.client?.isOpen) {
       return;

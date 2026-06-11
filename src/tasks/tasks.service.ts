@@ -3,8 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
-import { createDomainEvent } from '../kafka/kafka-event.factory';
-import { KafkaProducerService } from '../kafka/kafka-producer.service';
+import { OutboxService } from '../events/outbox.service';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -20,7 +19,7 @@ export class TasksService {
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async create(createTaskDto: CreateTaskDto) {
@@ -39,16 +38,20 @@ export class TasksService {
       }),
     );
 
-    await this.kafkaProducer.publish(
+    await this.outboxService.enqueue(
       KafkaTopic.TASK_CREATED,
-      createDomainEvent(KafkaTopic.TASK_CREATED, {
+      {
         taskId: task.id,
         shopId: shop.id,
         title: task.title,
         assignedToId: assignedTo?.id,
         status: task.status,
-      }),
-      task.id,
+      },
+      {
+        aggregateId: task.id,
+        aggregateType: 'Task',
+        partitionKey: shop.id,
+      },
     );
 
     return task;
@@ -82,16 +85,20 @@ export class TasksService {
       previousStatus !== TaskStatus.DONE &&
       updatedTask.status === TaskStatus.DONE
     ) {
-      await this.kafkaProducer.publish(
+      await this.outboxService.enqueue(
         KafkaTopic.TASK_COMPLETED,
-        createDomainEvent(KafkaTopic.TASK_COMPLETED, {
+        {
           taskId: updatedTask.id,
           shopId: updatedTask.shop.id,
           title: updatedTask.title,
           assignedToId: updatedTask.assignedTo?.id,
           status: TaskStatus.DONE,
-        }),
-        updatedTask.id,
+        },
+        {
+          aggregateId: updatedTask.id,
+          aggregateType: 'Task',
+          partitionKey: updatedTask.shop.id,
+        },
       );
     }
 

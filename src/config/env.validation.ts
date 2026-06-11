@@ -13,6 +13,8 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().required(),
+  DB_PRIMARY_HOST: Joi.string().allow('').default(''),
+  DB_REPLICA_HOSTS: Joi.string().allow('').default(''),
   DB_USERNAME: Joi.string().required(),
   DB_PASSWORD: Joi.string().required(),
   DB_NAME: Joi.string().required(),
@@ -44,4 +46,8 @@ export const envValidationSchema = Joi.object({
   MONGO_DB_NAME: Joi.string().default('food_chain_events'),
   MONGO_EVENTS_COLLECTION: Joi.string().default('domain_events'),
   DASHBOARD_DEMO_PERSIST_ENABLED: Joi.boolean().default(false),
+  OUTBOX_PUBLISHER_ENABLED: Joi.boolean().default(true),
+  OUTBOX_POLL_INTERVAL_MS: Joi.number().default(100),
+  OUTBOX_BATCH_SIZE: Joi.number().default(100),
+  OUTBOX_MAX_ATTEMPTS: Joi.number().default(3),
 });

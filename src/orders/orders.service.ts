@@ -13,8 +13,7 @@ import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
-import { createDomainEvent } from '../kafka/kafka-event.factory';
-import { KafkaProducerService } from '../kafka/kafka-producer.service';
+import { OutboxService } from '../events/outbox.service';
 import { MenuItem } from '../menu/entities/menu-item.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { User } from '../users/entities/user.entity';
@@ -47,7 +46,7 @@ export class OrdersService {
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(MenuItem)
     private readonly menuItemsRepository: Repository<MenuItem>,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async create(
@@ -184,26 +183,33 @@ export class OrdersService {
         );
       }
 
-      return manager.findOne(Order, {
+      const savedOrder = await manager.findOne(Order, {
         where: { id: order.id },
         relations: { shop: true, employee: true, items: { menuItem: true } },
       });
-    });
 
-    if (createdOrder) {
-      await this.kafkaProducer.publish(
-        KafkaTopic.ORDER_CREATED,
-        createDomainEvent(KafkaTopic.ORDER_CREATED, {
-          orderId: createdOrder.id,
-          orderNumber: createdOrder.orderNumber,
-          shopId: createdOrder.shop.id,
-          status: createdOrder.status,
-          totalAmount: createdOrder.totalAmount,
-          itemCount: createdOrder.items?.length ?? 0,
-        }),
-        createdOrder.id,
-      );
-    }
+      if (savedOrder) {
+        await this.outboxService.enqueue(
+          KafkaTopic.ORDER_CREATED,
+          {
+            orderId: savedOrder.id,
+            orderNumber: savedOrder.orderNumber,
+            shopId: savedOrder.shop.id,
+            status: savedOrder.status,
+            totalAmount: savedOrder.totalAmount,
+            itemCount: savedOrder.items?.length ?? 0,
+          },
+          {
+            aggregateId: savedOrder.id,
+            aggregateType: 'Order',
+            partitionKey: savedOrder.shop.id,
+            manager,
+          },
+        );
+      }
+
+      return savedOrder;
+    });
 
     return createdOrder;
   }
@@ -245,16 +251,20 @@ export class OrdersService {
     order.status = updateOrderStatusDto.status;
     const updatedOrder = await this.ordersRepository.save(order);
 
-    await this.kafkaProducer.publish(
+    await this.outboxService.enqueue(
       KafkaTopic.ORDER_UPDATED,
-      createDomainEvent(KafkaTopic.ORDER_UPDATED, {
+      {
         orderId: updatedOrder.id,
         orderNumber: updatedOrder.orderNumber,
         shopId: updatedOrder.shop.id,
         previousStatus,
         status: updatedOrder.status,
-      }),
-      updatedOrder.id,
+      },
+      {
+        aggregateId: updatedOrder.id,
+        aggregateType: 'Order',
+        partitionKey: updatedOrder.shop.id,
+      },
     );
 
     return updatedOrder;
@@ -325,20 +335,25 @@ export class OrdersService {
         order.status = OrderStatus.CANCELLED;
         const cancelledOrder = await manager.save(order);
 
+        await this.outboxService.enqueue(
+          KafkaTopic.ORDER_CANCELLED,
+          {
+            orderId: cancelledOrder.id,
+            orderNumber: cancelledOrder.orderNumber,
+            shopId: cancelledOrder.shop.id,
+            previousStatus,
+            status: OrderStatus.CANCELLED,
+          },
+          {
+            aggregateId: cancelledOrder.id,
+            aggregateType: 'Order',
+            partitionKey: cancelledOrder.shop.id,
+            manager,
+          },
+        );
+
         return { cancelledOrder, previousStatus };
       },
-    );
-
-    await this.kafkaProducer.publish(
-      KafkaTopic.ORDER_CANCELLED,
-      createDomainEvent(KafkaTopic.ORDER_CANCELLED, {
-        orderId: cancelledOrder.id,
-        orderNumber: cancelledOrder.orderNumber,
-        shopId: cancelledOrder.shop.id,
-        previousStatus,
-        status: OrderStatus.CANCELLED,
-      }),
-      cancelledOrder.id,
     );
 
     return cancelledOrder;

@@ -62,6 +62,10 @@ export class KafkaProducerService
     });
   }
 
+  canPublish() {
+    return Boolean(this.producer);
+  }
+
   async onApplicationShutdown() {
     if (this.producer) {
       await this.producer.disconnect();
