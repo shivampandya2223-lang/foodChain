@@ -108,6 +108,28 @@ export class UsersService {
     return this.toSafeUser(user);
   }
 
+  async findByIdForCurrentUser(id: string, currentUser: AuthenticatedUser) {
+    const user = await this.findById(id);
+
+    if (
+      currentUser.roles.includes(RoleType.SUPER_ADMIN) ||
+      currentUser.roles.includes(RoleType.ADMIN)
+    ) {
+      return user;
+    }
+
+    const requestedUserShopIds = new Set(user.shops?.map((shop) => shop.id));
+    const canReadUser = currentUser.shopIds.some((shopId) =>
+      requestedUserShopIds.has(shopId),
+    );
+
+    if (!canReadUser) {
+      throw new ForbiddenException('You cannot read this user');
+    }
+
+    return user;
+  }
+
   async findAll() {
     const users = await this.usersRepository.find({
       relations: { roles: true, shops: true },

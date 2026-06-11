@@ -20,24 +20,20 @@ export class PostgresEventStoreService {
   ) {}
 
   async insertEvent(event: PersistedEvent) {
-    const existing = await this.eventLogRepository.exists({
-      where: { eventId: event.eventId },
-    });
-
-    if (existing) {
-      return;
-    }
-
-    await this.eventLogRepository.save(
-      this.eventLogRepository.create({
+    await this.eventLogRepository
+      .createQueryBuilder()
+      .insert()
+      .into(DomainEventLog)
+      .values({
         eventId: event.eventId,
         eventName: event.eventName,
         topic: event.topic,
         sourceService: event.sourceService,
-        payload: event.payload,
+        payload: event.payload as never,
         occurredAt: new Date(event.occurredAt),
-      }),
-    );
+      })
+      .orIgnore()
+      .execute();
   }
 
   async insertAnalyticsSnapshot(payload: Record<string, unknown>) {

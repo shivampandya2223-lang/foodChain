@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -51,7 +52,10 @@ export class DevicesController {
   @ApiOperation({ summary: 'Update a device' })
   @ApiParam({ name: 'id', description: 'Device UUID' })
   @ApiBody({ type: UpdateDeviceDto })
-  update(@Param('id') id: string, @Body() updateDeviceDto: UpdateDeviceDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateDeviceDto: UpdateDeviceDto,
+  ) {
     return this.devicesService.update(id, updateDeviceDto);
   }
 }

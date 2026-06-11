@@ -85,10 +85,12 @@ export class ProductsService {
   }
 
   private async findShop(id: string) {
-    const shop = await this.shopsRepository.findOne({ where: { id } });
+    const shop = await this.shopsRepository.findOne({
+      where: { id, isActive: true },
+    });
 
     if (!shop) {
-      throw new NotFoundException('Shop not found');
+      throw new NotFoundException('Active shop not found');
     }
 
     return shop;

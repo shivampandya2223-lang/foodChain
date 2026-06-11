@@ -11,7 +11,7 @@ export class Device extends BaseEntity {
   @Column({ type: 'enum', enum: DeviceType })
   type: DeviceType;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, unique: true })
   deviceKey?: string;
 
   @Column({ default: true })

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -62,7 +63,7 @@ export class ShopsController {
   @ApiOperation({ summary: 'Get shop details' })
   @ApiParam({ name: 'id', description: 'Shop UUID' })
   @ApiOkResponse({ description: 'Returns one shop with relations.' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.shopsService.findOne(id);
   }
 
@@ -73,7 +74,10 @@ export class ShopsController {
   @ApiBody({ type: UpdateShopDto })
   @ApiOkResponse({ description: 'Shop updated.' })
   @ApiForbiddenResponse({ description: 'Missing shop management permission.' })
-  update(@Param('id') id: string, @Body() updateShopDto: UpdateShopDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateShopDto: UpdateShopDto,
+  ) {
     return this.shopsService.update(id, updateShopDto);
   }
 
@@ -84,7 +88,7 @@ export class ShopsController {
   @ApiBody({ type: AssignShopUsersDto })
   @ApiOkResponse({ description: 'Users assigned to shop.' })
   assignUsers(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() assignShopUsersDto: AssignShopUsersDto,
   ) {
     return this.shopsService.assignUsers(id, assignShopUsersDto);
@@ -98,7 +102,7 @@ export class ShopsController {
   @ApiForbiddenResponse({
     description: 'Only shop.delete can deactivate.',
   })
-  deactivate(@Param('id') id: string) {
+  deactivate(@Param('id', ParseUUIDPipe) id: string) {
     return this.shopsService.deactivate(id);
   }
 }

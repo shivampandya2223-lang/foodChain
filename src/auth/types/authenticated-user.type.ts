@@ -5,4 +5,5 @@ export type AuthenticatedUser = {
   email: string;
   roles: RoleType[];
   permissions: PermissionType[];
+  shopIds: string[];
 };

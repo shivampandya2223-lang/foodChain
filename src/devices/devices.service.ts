@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Shop } from '../shops/entities/shop.entity';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
@@ -17,6 +21,7 @@ export class DevicesService {
 
   async create(createDeviceDto: CreateDeviceDto) {
     const shop = await this.findShop(createDeviceDto.shopId);
+    await this.assertDeviceKeyIsAvailable(createDeviceDto.deviceKey);
 
     return this.devicesRepository.save(
       this.devicesRepository.create({
@@ -37,6 +42,7 @@ export class DevicesService {
 
   async update(id: string, updateDeviceDto: UpdateDeviceDto) {
     const device = await this.findOne(id);
+    await this.assertDeviceKeyIsAvailable(updateDeviceDto.deviceKey, id);
 
     Object.assign(device, updateDeviceDto);
     return this.devicesRepository.save(device);
@@ -56,12 +62,31 @@ export class DevicesService {
   }
 
   private async findShop(id: string) {
-    const shop = await this.shopsRepository.findOne({ where: { id } });
+    const shop = await this.shopsRepository.findOne({
+      where: { id, isActive: true },
+    });
 
     if (!shop) {
-      throw new NotFoundException('Shop not found');
+      throw new NotFoundException('Active shop not found');
     }
 
     return shop;
+  }
+
+  private async assertDeviceKeyIsAvailable(deviceKey?: string, id?: string) {
+    if (!deviceKey) {
+      return;
+    }
+
+    const existingDevice = await this.devicesRepository.findOne({
+      where: {
+        deviceKey,
+        ...(id ? { id: Not(id) } : {}),
+      },
+    });
+
+    if (existingDevice) {
+      throw new BadRequestException('A device with this key already exists');
+    }
   }
 }

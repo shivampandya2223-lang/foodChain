@@ -29,7 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.usersRepository.findOne({
       where: { id: payload.sub, isActive: true },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, shops: true },
     });
 
     if (!user) {
@@ -47,6 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       roles,
       permissions: [...new Set(permissions)],
+      shopIds: user.shops?.map((shop) => shop.id) ?? [],
     };
   }
 }

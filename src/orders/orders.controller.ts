@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -55,7 +56,7 @@ export class OrdersController {
   @Permissions(PermissionType.ORDER_READ)
   @ApiOperation({ summary: 'Get order by id' })
   @ApiParam({ name: 'id', description: 'Order UUID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.findOne(id);
   }
 
@@ -65,7 +66,7 @@ export class OrdersController {
   @ApiParam({ name: 'id', description: 'Order UUID' })
   @ApiBody({ type: UpdateOrderStatusDto })
   updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(id, updateOrderStatusDto);
@@ -75,7 +76,7 @@ export class OrdersController {
   @Permissions(PermissionType.ORDER_CANCEL)
   @ApiOperation({ summary: 'Cancel a pending order' })
   @ApiParam({ name: 'id', description: 'Order UUID' })
-  cancel(@Param('id') id: string) {
+  cancel(@Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.cancel(id);
   }
 }

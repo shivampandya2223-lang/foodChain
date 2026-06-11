@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
@@ -30,7 +31,7 @@ type IngredientRequirement = {
 @Injectable()
 export class OrdersService {
   private readonly allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
-    [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+    [OrderStatus.PENDING]: [OrderStatus.CONFIRMED],
     [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING],
     [OrderStatus.PREPARING]: [OrderStatus.READY],
     [OrderStatus.READY]: [OrderStatus.COMPLETED],
@@ -46,8 +47,6 @@ export class OrdersService {
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(MenuItem)
     private readonly menuItemsRepository: Repository<MenuItem>,
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
     private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
@@ -88,6 +87,16 @@ export class OrdersService {
           throw new BadRequestException(`${menuItem.name} is not available`);
         }
 
+        const inactiveRecipeItem = menuItem.recipeItems?.find(
+          (recipeItem) => !recipeItem.product.isActive,
+        );
+
+        if (inactiveRecipeItem) {
+          throw new BadRequestException(
+            `${inactiveRecipeItem.product.name} is inactive`,
+          );
+        }
+
         const unitPrice = Number(menuItem.price);
         const lineTotal = unitPrice * itemDto.quantity;
         totalAmount += lineTotal;
@@ -119,16 +128,8 @@ export class OrdersService {
         });
       });
 
-      for (const requirement of requirements.values()) {
-        if (Number(requirement.inventoryItem.quantity) < requirement.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for ${requirement.inventoryItem.product.name}`,
-          );
-        }
-      }
-
       const employee = currentUser
-        ? await this.usersRepository.findOne({ where: { id: currentUser.id } })
+        ? await manager.findOne(User, { where: { id: currentUser.id } })
         : undefined;
 
       const order = await manager.save(
@@ -145,12 +146,24 @@ export class OrdersService {
       );
 
       for (const requirement of requirements.values()) {
-        const inventoryItem = await manager.findOneOrFail(InventoryItem, {
+        const inventoryItem = await manager.findOne(InventoryItem, {
           where: { id: requirement.inventoryItem.id },
-          relations: { shop: true },
+          relations: { product: true, shop: true },
+          lock: { mode: 'pessimistic_write' },
         });
+
+        if (!inventoryItem) {
+          throw new NotFoundException('Inventory item not found');
+        }
+
         const quantityBefore = Number(inventoryItem.quantity);
         const quantityAfter = quantityBefore - requirement.quantity;
+
+        if (quantityAfter < 0) {
+          throw new BadRequestException(
+            `Insufficient stock for ${inventoryItem.product.name}`,
+          );
+        }
 
         inventoryItem.quantity = quantityAfter.toFixed(3);
         await manager.save(inventoryItem);
@@ -248,15 +261,73 @@ export class OrdersService {
   }
 
   async cancel(id: string) {
-    const order = await this.findOne(id);
-    const previousStatus = order.status;
+    const { cancelledOrder, previousStatus } = await this.dataSource.transaction(
+      async (manager) => {
+        const order = await manager.findOne(Order, {
+          where: { id },
+          relations: { shop: true, employee: true, items: { menuItem: true } },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException('Only pending orders can be cancelled');
-    }
+        if (!order) {
+          throw new NotFoundException('Order not found');
+        }
 
-    order.status = OrderStatus.CANCELLED;
-    const cancelledOrder = await this.ordersRepository.save(order);
+        const previousStatus = order.status;
+
+        if (order.status !== OrderStatus.PENDING) {
+          throw new BadRequestException('Only pending orders can be cancelled');
+        }
+
+        const orderTransactions = await manager.find(InventoryTransaction, {
+          where: {
+            source: InventoryTransactionSource.ORDER,
+            referenceId: order.id,
+            type: InventoryTransactionType.STOCK_OUT,
+          },
+          relations: { inventoryItem: { product: true }, shop: true },
+        });
+
+        for (const orderTransaction of orderTransactions) {
+          const inventoryItem = await manager.findOne(InventoryItem, {
+            where: { id: orderTransaction.inventoryItem.id },
+            relations: { product: true, shop: true },
+            lock: { mode: 'pessimistic_write' },
+          });
+
+          if (!inventoryItem) {
+            throw new NotFoundException('Inventory item not found');
+          }
+
+          const restoredQuantity = Number(orderTransaction.quantity);
+          const quantityBefore = Number(inventoryItem.quantity);
+          const quantityAfter = quantityBefore + restoredQuantity;
+
+          inventoryItem.quantity = quantityAfter.toFixed(3);
+          await manager.save(inventoryItem);
+
+          await manager.save(
+            manager.create(InventoryTransaction, {
+              type: InventoryTransactionType.STOCK_IN,
+              source: InventoryTransactionSource.ORDER,
+              referenceId: order.id,
+              quantity: restoredQuantity.toFixed(3),
+              quantityBefore: quantityBefore.toFixed(3),
+              quantityAfter: quantityAfter.toFixed(3),
+              reason: `Cancelled order ${order.orderNumber}`,
+              shop: orderTransaction.shop,
+              inventoryItem,
+              createdBy: order.employee,
+            }),
+          );
+        }
+
+        order.status = OrderStatus.CANCELLED;
+        const cancelledOrder = await manager.save(order);
+
+        return { cancelledOrder, previousStatus };
+      },
+    );
 
     await this.kafkaProducer.publish(
       KafkaTopic.ORDER_CANCELLED,
@@ -274,18 +345,18 @@ export class OrdersService {
   }
 
   private async findShop(id: string) {
-    const shop = await this.shopsRepository.findOne({ where: { id } });
+    const shop = await this.shopsRepository.findOne({
+      where: { id, isActive: true },
+    });
 
     if (!shop) {
-      throw new NotFoundException('Shop not found');
+      throw new NotFoundException('Active shop not found');
     }
 
     return shop;
   }
 
   private createOrderNumber() {
-    return `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, '0')}`;
+    return `ORD-${randomUUID()}`;
   }
 }

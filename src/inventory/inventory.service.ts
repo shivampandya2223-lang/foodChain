@@ -24,8 +24,6 @@ export class InventoryService {
     private readonly inventoryItemsRepository: Repository<InventoryItem>,
     @InjectRepository(InventoryTransaction)
     private readonly transactionsRepository: Repository<InventoryTransaction>,
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
     private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
@@ -89,6 +87,10 @@ export class InventoryService {
         throw new NotFoundException('Inventory item not found');
       }
 
+      if (!inventoryItem.shop.isActive) {
+        throw new BadRequestException('Shop is inactive');
+      }
+
       const quantityBefore = Number(inventoryItem.quantity);
       const quantityAfter =
         type === InventoryTransactionType.STOCK_IN
@@ -103,7 +105,7 @@ export class InventoryService {
       await manager.save(inventoryItem);
 
       const createdBy = currentUser
-        ? await this.usersRepository.findOne({ where: { id: currentUser.id } })
+        ? await manager.findOne(User, { where: { id: currentUser.id } })
         : undefined;
 
       const transaction = manager.create(InventoryTransaction, {

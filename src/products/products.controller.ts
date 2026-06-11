@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -53,7 +54,7 @@ export class ProductsController {
   @Permissions(PermissionType.PRODUCT_READ)
   @ApiOperation({ summary: 'Get product by id' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.productsService.findOne(id);
   }
 
@@ -62,7 +63,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiBody({ type: UpdateProductDto })
-  update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateProductDto: UpdateProductDto,
+  ) {
     return this.productsService.update(id, updateProductDto);
   }
 
@@ -70,7 +74,7 @@ export class ProductsController {
   @Permissions(PermissionType.PRODUCT_DELETE)
   @ApiOperation({ summary: 'Deactivate product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  deactivate(@Param('id') id: string) {
+  deactivate(@Param('id', ParseUUIDPipe) id: string) {
     return this.productsService.deactivate(id);
   }
 }

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -51,7 +52,10 @@ export class TasksController {
   @ApiOperation({ summary: 'Update task status/details' })
   @ApiParam({ name: 'id', description: 'Task UUID' })
   @ApiBody({ type: UpdateTaskDto })
-  update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateTaskDto: UpdateTaskDto,
+  ) {
     return this.tasksService.update(id, updateTaskDto);
   }
 }

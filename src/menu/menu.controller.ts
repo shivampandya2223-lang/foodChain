@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -53,7 +54,7 @@ export class MenuController {
   @ApiParam({ name: 'id', description: 'Menu item UUID' })
   @ApiBody({ type: UpdateMenuItemDto })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
   ) {
     return this.menuService.update(id, updateMenuItemDto);
@@ -63,7 +64,7 @@ export class MenuController {
   @Permissions(PermissionType.MENU_DELETE)
   @ApiOperation({ summary: 'Deactivate menu item' })
   @ApiParam({ name: 'id', description: 'Menu item UUID' })
-  deactivate(@Param('id') id: string) {
+  deactivate(@Param('id', ParseUUIDPipe) id: string) {
     return this.menuService.deactivate(id);
   }
 }

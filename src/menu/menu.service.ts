@@ -94,10 +94,12 @@ export class MenuService {
   }
 
   private async findShop(id: string) {
-    const shop = await this.shopsRepository.findOne({ where: { id } });
+    const shop = await this.shopsRepository.findOne({
+      where: { id, isActive: true },
+    });
 
     if (!shop) {
-      throw new NotFoundException('Shop not found');
+      throw new NotFoundException('Active shop not found');
     }
 
     return shop;
@@ -128,6 +130,10 @@ export class MenuService {
         throw new BadRequestException(
           'Recipe products must belong to the same shop as the menu item',
         );
+      }
+
+      if (!product.isActive) {
+        throw new BadRequestException(`${product.name} is inactive`);
       }
 
       return this.recipeItemsRepository.create({
