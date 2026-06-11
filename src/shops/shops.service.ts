@@ -4,9 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { OutboxService } from '../events/outbox.service';
+import { RedisCacheService } from '../storage/redis-cache.service';
 import { User } from '../users/entities/user.entity';
 import { AssignShopUsersDto } from './dto/assign-shop-users.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
@@ -16,46 +17,57 @@ import { Shop } from './entities/shop.entity';
 @Injectable()
 export class ShopsService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(Shop)
     private readonly shopsRepository: Repository<Shop>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly outboxService: OutboxService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   async create(createShopDto: CreateShopDto) {
-    const slug = createShopDto.slug ?? this.slugify(createShopDto.name);
-    await this.assertSlugIsAvailable(slug);
+    const savedShop = await this.dataSource.transaction(async (manager) => {
+      const slug = createShopDto.slug ?? this.slugify(createShopDto.name);
+      await this.assertSlugIsAvailable(slug, manager);
 
-    const owner = createShopDto.ownerId
-      ? await this.findUser(createShopDto.ownerId)
-      : undefined;
+      const owner = createShopDto.ownerId
+        ? await this.findUser(createShopDto.ownerId, manager)
+        : undefined;
 
-    const shop = this.shopsRepository.create({
-      name: createShopDto.name,
-      slug,
-      address: createShopDto.address,
-      phone: createShopDto.phone,
-      owner,
-      users: owner ? [owner] : [],
+      const shop = manager.create(Shop, {
+        name: createShopDto.name,
+        slug,
+        address: createShopDto.address,
+        phone: createShopDto.phone,
+        owner,
+        users: owner ? [owner] : [],
+      });
+
+      const savedShop = await manager.save(shop);
+
+      await this.outboxService.enqueue(
+        KafkaTopic.SHOP_CREATED,
+        {
+          shopId: savedShop.id,
+          name: savedShop.name,
+          slug: savedShop.slug,
+          ownerId: savedShop.owner?.id,
+        },
+        {
+          aggregateId: savedShop.id,
+          aggregateType: 'Shop',
+          partitionKey: savedShop.id,
+          manager,
+        },
+      );
+
+      return savedShop;
     });
 
-    const savedShop = await this.shopsRepository.save(shop);
-
-    await this.outboxService.enqueue(
-      KafkaTopic.SHOP_CREATED,
-      {
-        shopId: savedShop.id,
-        name: savedShop.name,
-        slug: savedShop.slug,
-        ownerId: savedShop.owner?.id,
-      },
-      {
-        aggregateId: savedShop.id,
-        aggregateType: 'Shop',
-        partitionKey: savedShop.id,
-      },
-    );
+    if (savedShop.owner?.id) {
+      await this.invalidateUserAuthCache(savedShop.owner.id);
+    }
 
     return savedShop;
   }
@@ -88,6 +100,7 @@ export class ShopsService {
 
   async update(id: string, updateShopDto: UpdateShopDto) {
     const shop = await this.findOne(id);
+    const previousOwnerId = shop.owner?.id;
 
     if (updateShopDto.slug && updateShopDto.slug !== shop.slug) {
       await this.assertSlugIsAvailable(updateShopDto.slug);
@@ -110,7 +123,11 @@ export class ShopsService {
       shop.users = [...(shop.users ?? []), owner];
     }
 
-    return this.shopsRepository.save(shop);
+    const savedShop = await this.shopsRepository.save(shop);
+    await this.invalidateUserAuthCache(previousOwnerId);
+    await this.invalidateUserAuthCache(savedShop.owner?.id);
+
+    return savedShop;
   }
 
   async assignUsers(id: string, assignShopUsersDto: AssignShopUsersDto) {
@@ -129,17 +146,29 @@ export class ShopsService {
       ...users.filter((user) => !existingUserIds.has(user.id)),
     ];
 
-    return this.shopsRepository.save(shop);
+    const savedShop = await this.shopsRepository.save(shop);
+    await Promise.all(
+      savedShop.users?.map((user) => this.invalidateUserAuthCache(user.id)) ??
+        [],
+    );
+
+    return savedShop;
   }
 
   async deactivate(id: string) {
     const shop = await this.findOne(id);
     shop.isActive = false;
-    return this.shopsRepository.save(shop);
+    const savedShop = await this.shopsRepository.save(shop);
+    await Promise.all(
+      savedShop.users?.map((user) => this.invalidateUserAuthCache(user.id)) ??
+        [],
+    );
+
+    return savedShop;
   }
 
-  private async findUser(id: string) {
-    const user = await this.usersRepository.findOne({ where: { id } });
+  private async findUser(id: string, manager = this.dataSource.manager) {
+    const user = await manager.findOne(User, { where: { id } });
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -148,8 +177,11 @@ export class ShopsService {
     return user;
   }
 
-  private async assertSlugIsAvailable(slug: string) {
-    const existingShop = await this.shopsRepository.findOne({
+  private async assertSlugIsAvailable(
+    slug: string,
+    manager = this.dataSource.manager,
+  ) {
+    const existingShop = await manager.findOne(Shop, {
       where: { slug },
     });
 
@@ -164,5 +196,13 @@ export class ShopsService {
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
+  }
+
+  private async invalidateUserAuthCache(userId?: string) {
+    if (!userId) {
+      return;
+    }
+
+    await this.redisCache.delete(`auth:user:${userId}`);
   }
 }

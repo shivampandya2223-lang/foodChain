@@ -42,10 +42,6 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     @InjectRepository(Order)
     private readonly ordersRepository: Repository<Order>,
-    @InjectRepository(Shop)
-    private readonly shopsRepository: Repository<Shop>,
-    @InjectRepository(MenuItem)
-    private readonly menuItemsRepository: Repository<MenuItem>,
     private readonly outboxService: OutboxService,
   ) {}
 
@@ -54,8 +50,15 @@ export class OrdersService {
     currentUser?: AuthenticatedUser,
   ) {
     const createdOrder = await this.dataSource.transaction(async (manager) => {
-      const shop = await this.findShop(createOrderDto.shopId);
-      const menuItems = await this.menuItemsRepository.find({
+      const shop = await manager.findOne(Shop, {
+        where: { id: createOrderDto.shopId, isActive: true },
+      });
+
+      if (!shop) {
+        throw new NotFoundException('Active shop not found');
+      }
+
+      const menuItems = await manager.find(MenuItem, {
         where: { id: In(createOrderDto.items.map((item) => item.menuItemId)) },
         relations: {
           shop: true,
@@ -235,39 +238,49 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, updateOrderStatusDto: UpdateOrderStatusDto) {
-    const order = await this.findOne(id);
-    const previousStatus = order.status;
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(Order, {
+        where: { id },
+        relations: { shop: true, employee: true, items: { menuItem: true } },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    if (
-      !this.allowedTransitions[order.status].includes(
-        updateOrderStatusDto.status,
-      )
-    ) {
-      throw new BadRequestException(
-        `Cannot move order from ${order.status} to ${updateOrderStatusDto.status}`,
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+
+      const previousStatus = order.status;
+
+      const nextStatus = updateOrderStatusDto.status as unknown as OrderStatus;
+
+      if (!this.allowedTransitions[order.status].includes(nextStatus)) {
+        throw new BadRequestException(
+          `Cannot move order from ${order.status} to ${updateOrderStatusDto.status}`,
+        );
+      }
+
+      order.status = nextStatus;
+      const updatedOrder = await manager.save(order);
+
+      await this.outboxService.enqueue(
+        KafkaTopic.ORDER_UPDATED,
+        {
+          orderId: updatedOrder.id,
+          orderNumber: updatedOrder.orderNumber,
+          shopId: updatedOrder.shop.id,
+          previousStatus,
+          status: updatedOrder.status,
+        },
+        {
+          aggregateId: updatedOrder.id,
+          aggregateType: 'Order',
+          partitionKey: updatedOrder.shop.id,
+          manager,
+        },
       );
-    }
 
-    order.status = updateOrderStatusDto.status;
-    const updatedOrder = await this.ordersRepository.save(order);
-
-    await this.outboxService.enqueue(
-      KafkaTopic.ORDER_UPDATED,
-      {
-        orderId: updatedOrder.id,
-        orderNumber: updatedOrder.orderNumber,
-        shopId: updatedOrder.shop.id,
-        previousStatus,
-        status: updatedOrder.status,
-      },
-      {
-        aggregateId: updatedOrder.id,
-        aggregateType: 'Order',
-        partitionKey: updatedOrder.shop.id,
-      },
-    );
-
-    return updatedOrder;
+      return updatedOrder;
+    });
   }
 
   async cancel(id: string) {
@@ -357,18 +370,6 @@ export class OrdersService {
     );
 
     return cancelledOrder;
-  }
-
-  private async findShop(id: string) {
-    const shop = await this.shopsRepository.findOne({
-      where: { id, isActive: true },
-    });
-
-    if (!shop) {
-      throw new NotFoundException('Active shop not found');
-    }
-
-    return shop;
   }
 
   private createOrderNumber() {

@@ -80,6 +80,7 @@ export class InventoryService {
       const inventoryItem = await manager.findOne(InventoryItem, {
         where: { id: stockMovementDto.inventoryItemId },
         relations: { product: true, shop: true },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!inventoryItem) {

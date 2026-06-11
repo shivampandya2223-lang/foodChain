@@ -78,6 +78,10 @@ This project now includes the first production-scaling changes from the architec
 - Redis JWT cache: `JwtStrategy` checks `auth:user:<userId>` before loading the user/roles/permissions from PostgreSQL. Cached auth payloads expire after 5 minutes.
 - TypeORM read replicas: set `DB_REPLICA_HOSTS` to enable TypeORM replication. Reads can go to replicas while writes and transactions stay on the primary.
 - Transactional outbox: domain services enqueue events in `outbox_events`; `OutboxPublisherService` publishes pending events to Kafka asynchronously.
+- Concurrent-safe outbox polling: the publisher locks pending rows with `SKIP LOCKED` behavior so multiple API pods do not publish the same event batch.
+- Atomic domain events: order create/status/cancel, manual inventory movement, shop creation, user creation, and task create/complete write their database changes and outbox events in the same transaction.
+- Inventory safety: manual stock-in/stock-out and order stock deduction use pessimistic row locks before changing quantities.
+- Auth cache invalidation: user auth cache keys are deleted when user/shop membership changes through user creation, shop ownership changes, shop assignment, or shop deactivation.
 - Kafka partition keys: outbox events use `shopId` where available so a shop's events stay ordered while different shops process in parallel.
 
 ```text
@@ -96,7 +100,7 @@ API Pod (NestJS)
   └─ 4. Return response without waiting for Kafka
 
 Async worker:
-  OutboxPublisherService polls pending events
+  OutboxPublisherService locks and polls pending events
     └─ Publishes to Kafka
        ├─ Inventory service consumes events
        ├─ Notification service consumes events
@@ -957,7 +961,7 @@ PREPARING -> READY
 READY -> COMPLETED
 ```
 
-Use `PATCH /orders/:id/cancel` for cancellation so inventory is restored and the cancellation event is published.
+This endpoint accepts only `CONFIRMED`, `PREPARING`, `READY`, and `COMPLETED`. Use `PATCH /orders/:id/cancel` for cancellation so inventory is restored and the cancellation event is published.
 
 #### `PATCH /orders/:id/cancel`
 
@@ -1430,7 +1434,7 @@ MONGO_DB_NAME=food_chain_events
 MONGO_EVENTS_COLLECTION=domain_events
 ```
 
-API services do not publish domain events directly from request handlers. They enqueue events into `outbox_events`; the outbox publisher sends them to Kafka asynchronously. If Kafka is disabled or unavailable, pending events stay in PostgreSQL until the publisher can send them.
+API services do not publish domain events directly from request handlers. They enqueue events into `outbox_events`; the outbox publisher sends them to Kafka asynchronously. If Kafka is disabled or unavailable, pending events stay in PostgreSQL until the publisher can send them. In multi-pod deployments, outbox rows are selected with row locks and skip-locked behavior so only one pod publishes a given pending event.
 
 JWT validation uses Redis when `REDIS_ENABLED=true`. The key format is `auth:user:<userId>` and cached auth payloads expire after 5 minutes.
 

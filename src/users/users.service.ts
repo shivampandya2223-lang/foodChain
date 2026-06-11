@@ -6,21 +6,21 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { KafkaTopic } from '../common/enums/kafka-topic.enum';
 import { RoleType } from '../common/enums/role.enum';
 import { OutboxService } from '../events/outbox.service';
 import { Role } from '../roles/entities/role.entity';
 import { Shop } from '../shops/entities/shop.entity';
+import { RedisCacheService } from '../storage/redis-cache.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User } from './entities/user.entity';
-
-export type SafeUser = Omit<User, 'passwordHash'>;
 
 @Injectable()
 export class UsersService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     @InjectRepository(Role)
@@ -28,6 +28,7 @@ export class UsersService {
     @InjectRepository(Shop)
     private readonly shopsRepository: Repository<Shop>,
     private readonly outboxService: OutboxService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   async create(createUserDto: CreateUserDto, creator?: AuthenticatedUser) {
@@ -59,36 +60,43 @@ export class UsersService {
       ? await this.usersRepository.findOne({ where: { id: creator.id } })
       : undefined;
 
-    const user = this.usersRepository.create({
-      email,
-      passwordHash: await bcrypt.hash(createUserDto.password, 10),
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
-      phone: createUserDto.phone,
-      roles,
-      shops,
-      createdBy: createdBy ?? undefined,
+    const savedUser = await this.dataSource.transaction(async (manager) => {
+      const user = manager.create(User, {
+        email,
+        passwordHash: await bcrypt.hash(createUserDto.password, 10),
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        phone: createUserDto.phone,
+        roles,
+        shops,
+        createdBy: createdBy ?? undefined,
+      });
+
+      const savedUser = await manager.save(user);
+
+      await this.outboxService.enqueue(
+        KafkaTopic.USER_CREATED,
+        {
+          userId: savedUser.id,
+          email: savedUser.email,
+          roles: roles.map((role) => role.name),
+          shopIds: shops.map((shop) => shop.id),
+          createdById: createdBy?.id,
+        },
+        {
+          aggregateId: savedUser.id,
+          aggregateType: 'User',
+          partitionKey: shops[0]?.id ?? savedUser.id,
+          manager,
+        },
+      );
+
+      return savedUser;
     });
 
-    const savedUser = await this.usersRepository.save(user);
+    await this.invalidateUserAuthCache(savedUser.id);
 
-    await this.outboxService.enqueue(
-      KafkaTopic.USER_CREATED,
-      {
-        userId: savedUser.id,
-        email: savedUser.email,
-        roles: roles.map((role) => role.name),
-        shopIds: shops.map((shop) => shop.id),
-        createdById: createdBy?.id,
-      },
-      {
-        aggregateId: savedUser.id,
-        aggregateType: 'User',
-        partitionKey: shops[0]?.id ?? savedUser.id,
-      },
-    );
-
-    return this.toSafeUser(savedUser);
+    return savedUser;
   }
 
   async findByEmailWithRoles(email: string): Promise<User | null> {
@@ -108,7 +116,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return this.toSafeUser(user);
+    return user;
   }
 
   async findByIdForCurrentUser(id: string, currentUser: AuthenticatedUser) {
@@ -139,7 +147,11 @@ export class UsersService {
       order: { createdAt: 'DESC' },
     });
 
-    return users.map((user) => this.toSafeUser(user));
+    return users;
+  }
+
+  async invalidateUserAuthCache(userId: string) {
+    await this.redisCache.delete(`auth:user:${userId}`);
   }
 
   private assertCreatorCanCreateRoles(
@@ -214,10 +226,4 @@ export class UsersService {
     return shops;
   }
 
-  private toSafeUser(user: User) {
-    const safeUser: Partial<User> = { ...user };
-    delete safeUser.passwordHash;
-
-    return safeUser;
-  }
 }

@@ -5,8 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { DomainEvent } from '../contracts/events/domain-event.type';
 import { KafkaProducerService } from '../kafka/kafka-producer.service';
 import { OutboxEvent, OutboxEventStatus } from './entities/outbox-event.entity';
@@ -22,8 +21,7 @@ export class OutboxPublisherService
   constructor(
     private readonly configService: ConfigService,
     private readonly kafkaProducer: KafkaProducerService,
-    @InjectRepository(OutboxEvent)
-    private readonly outboxRepository: Repository<OutboxEvent>,
+    private readonly dataSource: DataSource,
   ) {}
 
   onModuleInit() {
@@ -37,9 +35,13 @@ export class OutboxPublisherService
     }, this.getPollIntervalMs());
   }
 
-  onApplicationShutdown() {
+  async onApplicationShutdown() {
     if (this.timer) {
       clearInterval(this.timer);
+    }
+
+    while (this.isPublishing) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
 
@@ -51,21 +53,32 @@ export class OutboxPublisherService
     this.isPublishing = true;
 
     try {
-      const events = await this.outboxRepository.find({
-        where: { status: OutboxEventStatus.PENDING },
-        order: { createdAt: 'ASC' },
-        take: this.getBatchSize(),
-      });
+      await this.dataSource.transaction(async (manager) => {
+        const events = await manager
+          .getRepository(OutboxEvent)
+          .createQueryBuilder('outbox')
+          .where('outbox.status = :status', {
+            status: OutboxEventStatus.PENDING,
+          })
+          .orderBy('outbox.createdAt', 'ASC')
+          .take(this.getBatchSize())
+          .setLock('pessimistic_write')
+          .setOnLocked('skip_locked')
+          .getMany();
 
-      for (const outboxEvent of events) {
-        await this.publishEvent(outboxEvent);
-      }
+        for (const outboxEvent of events) {
+          await this.publishEvent(outboxEvent, manager);
+        }
+      });
     } finally {
       this.isPublishing = false;
     }
   }
 
-  private async publishEvent(outboxEvent: OutboxEvent) {
+  private async publishEvent(
+    outboxEvent: OutboxEvent,
+    manager: EntityManager,
+  ) {
     const event: DomainEvent<Record<string, unknown>> = {
       eventId: outboxEvent.eventId,
       eventName: outboxEvent.eventName,
@@ -83,7 +96,7 @@ export class OutboxPublisherService
       outboxEvent.status = OutboxEventStatus.PUBLISHED;
       outboxEvent.publishedAt = new Date();
       outboxEvent.lastError = undefined;
-      await this.outboxRepository.save(outboxEvent);
+      await manager.save(outboxEvent);
     } catch (error) {
       outboxEvent.attempts += 1;
       outboxEvent.lastError =
@@ -93,7 +106,7 @@ export class OutboxPublisherService
         outboxEvent.status = OutboxEventStatus.FAILED;
       }
 
-      await this.outboxRepository.save(outboxEvent);
+      await manager.save(outboxEvent);
       this.logger.error(
         `Outbox publish failed for ${outboxEvent.eventId}: ${outboxEvent.lastError}`,
       );
